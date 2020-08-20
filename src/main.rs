@@ -17,6 +17,7 @@ pub enum ApiError {
     NotFound,
     BadRequest(String),
     InternalError(String),
+    Unauthorized,
 }
 
 impl ApiError {
@@ -28,6 +29,9 @@ impl ApiError {
     }
     pub fn internal_error(msg: &str) -> Self {
         ApiError::InternalError(msg.into())
+    }
+    pub fn unauthorized() -> Self {
+        ApiError::Unauthorized
     }
 }
 
@@ -45,6 +49,10 @@ impl warp::Reply for ApiError {
             ApiError::InternalError(msg) => warp::http::Response::builder()
                 .status(500)
                 .body(msg.into())
+                .unwrap(),
+            ApiError::Unauthorized => warp::http::Response::builder()
+                .status(401)
+                .body("".into())
                 .unwrap(),
         }
     }
@@ -78,6 +86,10 @@ impl From<ApiError> for warp::reject::Rejection {
                 warp::http::StatusCode::INTERNAL_SERVER_ERROR,
                 msg,
             )),
+            ApiError::Unauthorized => warp::reject::custom(ApiRejection::new(
+                warp::http::StatusCode::UNAUTHORIZED,
+                "".to_string(),
+            )),
         }
     }
 }
@@ -101,7 +113,7 @@ impl From<&UserObj> for User {
     }
 }
 
-async fn get_users(mut client: UserClient<Channel>) -> ApiResult {
+async fn get_users(token: Option<String>, mut client: UserClient<Channel>) -> ApiResult {
     let all = client.get_all(()).await.unwrap().into_inner();
     let v = all.users.iter().map(|u| u.into()).collect::<Vec<User>>();
     Ok(warp::reply::json(&v))
@@ -109,20 +121,15 @@ async fn get_users(mut client: UserClient<Channel>) -> ApiResult {
 
 #[tokio::main]
 async fn main() {
+    let auth = warp::header::optional::<String>("Token");
     let client = UserClient::connect("http://[::1]:50051").await.unwrap();
-
-    let root = warp::path::end().map(|| warp::redirect(warp::http::Uri::from_static("/api")));
-    let api = warp::path!("api" / ..);
-    let welcome = api
-        .and(warp::path::end())
-        .map(|| "Welcome to Gardenzilla API");
-    let users = api
-        .and(warp::path!("hello"))
+    let welcome = warp::path::end().map(|| format!("Welcome to Gardenzilla API"));
+    let users = warp::path!("hello")
+        .and(auth)
         .and(warp::any().map(move || client.clone()))
         .and_then(get_users);
 
-    let routes = warp::any().and(root.or(welcome).or(users));
-
+    let routes = warp::any().and(welcome.or(users));
     warp::serve(warp::any().and(routes).recover(handle_rejection))
         .run(([127, 0, 0, 1], 3030))
         .await;
