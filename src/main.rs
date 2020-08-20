@@ -1,5 +1,4 @@
 // #![deny(warnings)]
-use hyper;
 use protos;
 use protos::user::{user_client::UserClient, UserObj};
 use serde::Serialize;
@@ -35,28 +34,28 @@ impl ApiError {
     }
 }
 
-impl warp::Reply for ApiError {
-    fn into_response(self) -> warp::reply::Response {
-        match self {
-            ApiError::NotFound => warp::http::Response::builder()
-                .status(404)
-                .body(hyper::body::Body::empty())
-                .unwrap(),
-            ApiError::BadRequest(msg) => warp::http::Response::builder()
-                .status(400)
-                .body(msg.into())
-                .unwrap(),
-            ApiError::InternalError(msg) => warp::http::Response::builder()
-                .status(500)
-                .body(msg.into())
-                .unwrap(),
-            ApiError::Unauthorized => warp::http::Response::builder()
-                .status(401)
-                .body("".into())
-                .unwrap(),
-        }
-    }
-}
+// impl warp::Reply for ApiError {
+//     fn into_response(self) -> warp::reply::Response {
+//         match self {
+//             ApiError::NotFound => warp::http::Response::builder()
+//                 .status(404)
+//                 .body(hyper::body::Body::empty())
+//                 .unwrap(),
+//             ApiError::BadRequest(msg) => warp::http::Response::builder()
+//                 .status(400)
+//                 .body(msg.into())
+//                 .unwrap(),
+//             ApiError::InternalError(msg) => warp::http::Response::builder()
+//                 .status(500)
+//                 .body(msg.into())
+//                 .unwrap(),
+//             ApiError::Unauthorized => warp::http::Response::builder()
+//                 .status(401)
+//                 .body("".into())
+//                 .unwrap(),
+//         }
+//     }
+// }
 
 #[derive(Debug)]
 struct ApiRejection {
@@ -97,24 +96,23 @@ impl From<ApiError> for warp::reject::Rejection {
 impl warp::reject::Reject for ApiError {}
 
 #[derive(Serialize)]
-struct User {
-    username: String,
-    email: String,
-    phone: String,
+struct User<'a> {
+    username: &'a str,
+    email: &'a str,
+    phone: &'a str,
 }
 
-impl From<&UserObj> for User {
-    fn from(u: &UserObj) -> Self {
+impl<'a> From<&'a UserObj> for User<'a> {
+    fn from(u: &'a UserObj) -> Self {
         User {
-            username: u.id.to_string(),
-            email: u.email.to_string(),
-            phone: u.phone.to_string(),
+            username: &u.id,
+            email: &u.email,
+            phone: &u.phone,
         }
     }
 }
 
-async fn get_users(token: String, mut client: UserClient<Channel>) -> ApiResult {
-    println!("Token is {}", token);
+async fn get_users(_: String, mut client: UserClient<Channel>) -> ApiResult {
     let all = client.get_all(()).await.unwrap().into_inner();
     let v = all.users.iter().map(|u| u.into()).collect::<Vec<User>>();
     Ok(warp::reply::json(&v))
