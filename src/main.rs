@@ -113,19 +113,33 @@ impl From<&UserObj> for User {
     }
 }
 
-async fn get_users(token: Option<String>, mut client: UserClient<Channel>) -> ApiResult {
+async fn get_users(token: String, mut client: UserClient<Channel>) -> ApiResult {
+    println!("Token is {}", token);
     let all = client.get_all(()).await.unwrap().into_inner();
     let v = all.users.iter().map(|u| u.into()).collect::<Vec<User>>();
     Ok(warp::reply::json(&v))
 }
 
+fn auth() -> impl Filter<Extract = (String,), Error = Rejection> + Copy {
+    warp::header::optional::<String>("Token").and_then(|n: Option<String>| async move {
+        if let Some(token) = n {
+            Ok(token)
+        } else {
+            Err(reject::custom(ApiRejection::new(
+                warp::http::StatusCode::UNAUTHORIZED,
+                "".into(),
+            )))
+        }
+    })
+}
+
 #[tokio::main]
 async fn main() {
-    let auth = warp::header::optional::<String>("Token");
+    // let auth = warp::header::optional::<String>("Token");
     let client = UserClient::connect("http://[::1]:50051").await.unwrap();
     let welcome = warp::path::end().map(|| format!("Welcome to Gardenzilla API"));
     let users = warp::path!("hello")
-        .and(auth)
+        .and(auth())
         .and(warp::any().map(move || client.clone()))
         .and_then(get_users);
 
