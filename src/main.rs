@@ -106,14 +106,14 @@ impl From<tonic::Status> for ApiError {
 
 impl warp::reject::Reject for ApiError {}
 
-#[derive(Serialize)]
-struct User<'a> {
-    username: &'a str,
-    email: &'a str,
-    phone: &'a str,
-    name: &'a str,
-    date_created: &'a str,
-    created_by: &'a str,
+#[derive(Serialize, Deserialize)]
+struct User {
+    username: String,
+    email: String,
+    phone: String,
+    name: String,
+    date_created: String,
+    created_by: String,
     // ================
     // Important!
     // ================
@@ -122,19 +122,19 @@ struct User<'a> {
     // Instead we use direct API call for update customers
     //      ||
     //      \/
-    customers: &'a Vec<String>,
+    customers: Vec<String>,
 }
 
-impl<'a> From<&'a UserObj> for User<'a> {
-    fn from(u: &'a UserObj) -> Self {
+impl From<&UserObj> for User {
+    fn from(u: &UserObj) -> Self {
         User {
-            username: &u.id,
-            email: &u.email,
-            phone: &u.phone,
-            name: &u.name,
-            date_created: &u.created_at,
-            created_by: &u.created_by,
-            customers: &u.customers,
+            username: u.id.to_string(),
+            email: u.email.to_string(),
+            phone: u.phone.to_string(),
+            name: u.name.to_string(),
+            date_created: u.created_at.to_string(),
+            created_by: u.created_by.to_string(),
+            customers: u.customers.to_owned(),
         }
     }
 }
@@ -151,9 +151,10 @@ struct LoginForm {
     password: String,
 }
 
-#[derive(Deserialize)]
-struct NewPasswordForm {
-    new_password: String,
+#[derive(Serialize, Deserialize, Debug)]
+pub struct NewPasswordForm {
+    password1: Option<String>,
+    password2: Option<String>,
 }
 
 async fn new_password(
@@ -161,10 +162,13 @@ async fn new_password(
     mut client: UserClient<Channel>,
     new_password_form: NewPasswordForm,
 ) -> ApiResult {
+    if &new_password_form.password1 != &new_password_form.password2 {
+        return Err(ApiError::BadRequest("A megadott jelszavak nem egyeznek meg!".into()).into());
+    }
     client
         .set_new_password(NewPasswordRequest {
             userid: userid.into(),
-            new_password: new_password_form.new_password,
+            new_password: new_password_form.password1.unwrap_or("".into()),
         })
         .await
         .map_err(|e| ApiError::from(e))?;
@@ -203,6 +207,30 @@ async fn login(mut client: UserClient<Channel>, login_form: LoginForm) -> ApiRes
         token: token,
         username: res.name,
     }))
+}
+
+async fn update_profile(
+    userid: UserId,
+    mut client: UserClient<Channel>,
+    profile: User,
+) -> ApiResult {
+    let res = client
+        .update_by_id(UpdateByIdRequest {
+            user: Some(UserObj {
+                id: profile.username,
+                name: profile.name,
+                email: profile.email,
+                phone: profile.phone,
+                customers: profile.customers,
+                created_by: profile.created_by,
+                created_at: profile.date_created,
+            }),
+        })
+        .await
+        .map_err(|e| ApiError::from(e))?
+        .into_inner();
+    let user: User = (&res.user.unwrap()).into();
+    Ok(warp::reply::json(&user))
 }
 
 async fn get_users(_: UserId, mut client: UserClient<Channel>) -> ApiResult {
@@ -263,7 +291,7 @@ async fn main() {
         .and_then(login);
 
     let profile_new_password = warp::path!("new_password")
-        .and(warp::get())
+        .and(warp::post())
         .and(auth())
         .and(with_db(client.clone()))
         .and(warp::body::json())
@@ -273,8 +301,15 @@ async fn main() {
         .and(auth())
         .and(with_db(client.clone()))
         .and_then(get_user_by_id);
+    let profile_update = warp::path::end()
+        .and(warp::post())
+        .and(auth())
+        .and(with_db(client.clone()))
+        .and(warp::body::json())
+        .and_then(update_profile);
 
-    let profile = warp::path!("profile" / ..).and(profile_new_password.or(profile_get));
+    let profile =
+        warp::path!("profile" / ..).and(profile_new_password.or(profile_get).or(profile_update));
 
     let routes = warp::any().and(welcome.or(login).or(users).or(profile));
     warp::serve(warp::any().and(routes).recover(handle_rejection))
