@@ -7,7 +7,12 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-protos = {git = "https://github.com/mezeipetister/protos", tag = "0.1"}
+jwt = "0.4"
+log = "*"
+pretty_env_logger = "*"
+protos = {git = "https://github.com/gardenzilla/protos", tag = "0.2.0"}
+rust-crypto = "0.2"
+rustc-serialize = "0.3"
 serde = {version = "1.0", features = ["derive"]}
 serde_derive = "1.0"
 serde_json = "1.0"
