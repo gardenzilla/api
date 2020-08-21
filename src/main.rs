@@ -100,7 +100,16 @@ impl From<ApiError> for warp::reject::Rejection {
 
 impl From<tonic::Status> for ApiError {
     fn from(error: tonic::Status) -> Self {
-        ApiError::internal_error(&format!("service error: {}", error))
+        match error.code() {
+            tonic::Code::Internal => ApiError::internal_error(error.message()),
+            tonic::Code::NotFound => ApiError::not_found(),
+            tonic::Code::InvalidArgument => ApiError::bad_request(error.message()),
+            _ => ApiError::internal_error(&format!(
+                "Unhandled error! Code is {}, message is {}",
+                error.code(),
+                error.message()
+            )),
+        }
     }
 }
 
@@ -209,11 +218,7 @@ async fn login(mut client: UserClient<Channel>, login_form: LoginForm) -> ApiRes
     }))
 }
 
-async fn update_profile(
-    userid: UserId,
-    mut client: UserClient<Channel>,
-    profile: User,
-) -> ApiResult {
+async fn update_profile(_: UserId, mut client: UserClient<Channel>, profile: User) -> ApiResult {
     let res = client
         .update_by_id(UpdateByIdRequest {
             user: Some(UserObj {
