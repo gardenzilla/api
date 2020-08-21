@@ -35,6 +35,12 @@ impl std::ops::Deref for UserId {
     }
 }
 
+impl From<UserId> for String {
+    fn from(userid: UserId) -> Self {
+        userid.0
+    }
+}
+
 #[derive(Default, Deserialize, Serialize, RustcDecodable, RustcEncodable)]
 struct Custom {
     uid: String,
