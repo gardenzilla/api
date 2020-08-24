@@ -290,7 +290,12 @@ where
 //
 #[tokio::main]
 async fn main() {
-    let client = UserClient::connect("http://[::1]:50051").await.unwrap();
+    let addr_api: String = std::env::var("ADDR_api").expect("ADDRESS API NOT FOUND");
+    // let addr_email: String =
+    // std::env::var("ADDR_email_microservice").expect("ADDRESS EMAIL SERVICE NOT FOUND");
+    let addr_user: String =
+        std::env::var("ADDR_user_microservice").expect("ADDRESS USER SERVICE NOT FOUND");
+    let client = UserClient::connect(addr_user).await.unwrap();
     let welcome = warp::path::end().map(|| format!("Welcome to Gardenzilla API"));
     let users = warp::path!("hello")
         .and(auth())
@@ -326,6 +331,10 @@ async fn main() {
 
     let routes = warp::any().and(welcome.or(login).or(users).or(profile));
     warp::serve(warp::any().and(routes).recover(handle_rejection))
-        .run(([127, 0, 0, 1], 3030))
+        .run(
+            addr_api
+                .parse::<std::net::SocketAddr>()
+                .expect("ERROR WHILE PARSING API ADDRESS"),
+        )
         .await;
 }
