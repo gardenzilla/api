@@ -171,13 +171,21 @@ async fn new_password(
     mut client: UserClient<Channel>,
     new_password_form: NewPasswordForm,
 ) -> ApiResult {
-    if &new_password_form.password1 != &new_password_form.password2 {
+    let p1 = match new_password_form.password1 {
+        Some(_pwd) => _pwd,
+        None => return Err(ApiError::bad_request("jelszó1 kötelező").into()),
+    };
+    let p2 = match new_password_form.password2 {
+        Some(_pwd) => _pwd,
+        None => return Err(ApiError::bad_request("jelszó2 kötelező").into()),
+    };
+    if &p1 != &p2 {
         return Err(ApiError::BadRequest("A megadott jelszavak nem egyeznek meg!".into()).into());
     }
     client
         .set_new_password(NewPasswordRequest {
             userid: userid.into(),
-            new_password: new_password_form.password1.unwrap_or("".into()),
+            new_password: p1,
         })
         .await
         .map_err(|e| ApiError::from(e))?;
