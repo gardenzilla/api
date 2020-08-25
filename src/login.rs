@@ -20,6 +20,7 @@ use jwt::{Header, Token};
 use serde::{Deserialize, Serialize};
 use std::default::Default;
 
+const SECRET_ENV_KEY: &'static str = "API_SECRET";
 pub struct UserId(String);
 
 impl UserId {
@@ -63,7 +64,12 @@ pub fn create_token(user_id: &str) -> LoginResult<String> {
     };
     let token = Token::new(header, claims);
 
-    match token.signed(b"secret_key", Sha256::new()) {
+    match token.signed(
+        std::env::var(SECRET_ENV_KEY)
+            .expect("NO API SECRET ENV")
+            .as_bytes(),
+        Sha256::new(),
+    ) {
         Ok(token) => return Ok(token),
         Err(_) => return Err(LoginError::InternalError),
     }
@@ -75,7 +81,12 @@ pub fn verify_token(token: &str) -> LoginResult<UserId> {
         Err(_) => return Err(LoginError::WrongToken),
     };
 
-    if token.verify(b"secret_key", Sha256::new()) {
+    if token.verify(
+        std::env::var(SECRET_ENV_KEY)
+            .expect("NO API SECRET ENV")
+            .as_bytes(),
+        Sha256::new(),
+    ) {
         Ok(UserId::new(token.claims.uid))
     } else {
         Err(LoginError::WrongToken)
