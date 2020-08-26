@@ -32,17 +32,15 @@ where
     warp::any().map(move || db.clone())
 }
 
-#[tokio::main]
+#[tokio::main(max_threads = 10_000)]
 async fn main() {
     // Service init
     let client = UserClient::connect("http://[::1]:50051").await.unwrap();
     let welcome = warp::path::end().map(|| format!("Welcome to Gardenzilla API"));
 
-    // let users = warp::path!("hello")
-    //     .and(auth())
-    //     .and(with_db(client.clone()))
-    //     .and_then(handler::user::get_users);
-
+    /*
+     * Login routes
+     */
     let login_action = warp::path::end()
         .and(warp::post())
         .and(with_db(client.clone()))
@@ -57,6 +55,9 @@ async fn main() {
 
     let login = warp::path!("login" / ..).and(login_action.or(login_password_reset));
 
+    /*
+     * Profile routes
+     */
     let profile_new_password = warp::path!("new_password")
         .and(warp::post())
         .and(auth())
@@ -80,8 +81,33 @@ async fn main() {
     let profile =
         warp::path!("profile" / ..).and(profile_new_password.or(profile_get).or(profile_update));
 
+    /*
+     * User routes
+     */
+
+    let user_get_all = warp::path!("all")
+        .and(warp::get())
+        .and(auth())
+        .and(with_db(client.clone()))
+        .and_then(handler::user::get_all);
+
+    let user_get_by_id = warp::path::param()
+        .and(warp::get())
+        .and(auth())
+        .and(with_db(client.clone()))
+        .and_then(handler::user::get_by_id);
+
+    let user_new = warp::path!("new")
+        .and(warp::post())
+        .and(auth())
+        .and(with_db(client.clone()))
+        .and(warp::body::json())
+        .and_then(handler::user::create_new);
+
+    let user = warp::path!("user" / ..).and(user_get_all.or(user_get_by_id).or(user_new));
+
     // Compose routes
-    let routes = warp::any().and(welcome.or(login).or(profile));
+    let routes = warp::any().and(welcome.or(login).or(profile).or(user));
 
     // Init server
     warp::serve(warp::any().and(routes).recover(handle_rejection))

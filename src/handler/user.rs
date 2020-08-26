@@ -46,6 +46,26 @@ impl From<&UserObj> for User {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UserNew {
+    username: String,
+    email: String,
+    name: String,
+    phone: String,
+}
+
+impl UserNew {
+    fn to_request(self, created_by: UserId) -> CreateNewRequest {
+        CreateNewRequest {
+            username: self.username,
+            email: self.email,
+            name: self.name,
+            phone: self.phone,
+            created_by: created_by.into(),
+        }
+    }
+}
+
 pub async fn new_password(
     userid: UserId,
     mut client: UserClient<Channel>,
@@ -96,7 +116,7 @@ pub async fn update_profile(
     Ok(warp::reply::json(&user))
 }
 
-pub async fn get_users(_: UserId, mut client: UserClient<Channel>) -> ApiResult {
+pub async fn get_all(_: UserId, mut client: UserClient<Channel>) -> ApiResult {
     let all = client.get_all(()).await.unwrap().into_inner();
     let v = all.users.iter().map(|u| u.into()).collect::<Vec<User>>();
     Ok(warp::reply::json(&v))
@@ -107,6 +127,36 @@ pub async fn get_profile(userid: UserId, mut client: UserClient<Channel>) -> Api
         .get_by_id(GetByIdRequest {
             userid: userid.into(),
         })
+        .await
+        .map_err(|e| ApiError::from(e))?
+        .into_inner();
+    if let Some(user) = user.user {
+        let _user: User = (&user).into();
+        return Ok(reply::json(&_user));
+    }
+    Err(ApiError::not_found().into())
+}
+
+pub async fn get_by_id(id: String, userid: UserId, mut client: UserClient<Channel>) -> ApiResult {
+    let user = client
+        .get_by_id(GetByIdRequest { userid: id })
+        .await
+        .map_err(|e| ApiError::from(e))?
+        .into_inner();
+    if let Some(user) = user.user {
+        let _user: User = (&user).into();
+        return Ok(reply::json(&_user));
+    }
+    Err(ApiError::not_found().into())
+}
+
+pub async fn create_new(
+    userid: UserId,
+    mut client: UserClient<Channel>,
+    user_object: UserNew,
+) -> ApiResult {
+    let user = client
+        .create_new(user_object.to_request(userid))
         .await
         .map_err(|e| ApiError::from(e))?
         .into_inner();
