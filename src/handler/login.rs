@@ -50,7 +50,7 @@ pub async fn login(mut client: UserClient<Channel>, login_form: LoginForm) -> Ap
 
 pub async fn reset_password(mut client: UserClient<Channel>, form: FormResetPassword) -> ApiResult {
     let _ = client
-        .reset_password(ReserPasswordRequest {
+        .reset_password(ResetPasswordRequest {
             userid: form.email.unwrap_or_default(),
         })
         .await
