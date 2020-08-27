@@ -8,9 +8,10 @@ use tonic::transport::Channel;
 use warp::reply;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct NewPasswordForm {
-    password1: Option<String>,
-    password2: Option<String>,
+pub struct Address {
+    zip: String,
+    location: String,
+    address: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -20,140 +21,153 @@ pub struct Customer {
     email: String,
     phone: String,
     tax_number: String,
+    address: Address,
+    has_user: bool,
     users: Vec<String>,
+    date_created: String,
+    created_by: String,
 }
 
-impl From<&UserObj> for User {
-    fn from(u: &UserObj) -> Self {
-        User {
-            username: u.id.to_string(),
-            email: u.email.to_string(),
-            phone: u.phone.to_string(),
-            name: u.name.to_string(),
-            date_created: u.created_at.to_string(),
-            created_by: u.created_by.to_string(),
-            customers: u.customers.to_owned(),
+impl From<&CustomerObj> for Customer {
+    fn from(c: &CustomerObj) -> Self {
+        let address = if let Some(addr) = &c.address {
+            Address {
+                zip: addr.zip.to_owned(),
+                location: addr.location.to_owned(),
+                address: addr.address.to_owned(),
+            }
+        } else {
+            Address {
+                zip: "".into(),
+                location: "".into(),
+                address: "".into(),
+            }
+        };
+        let date_created = match &c.date_created {
+            Some(date) => date.rfc_3399.to_owned(),
+            None => "".into(),
+        };
+        Self {
+            id: c.id.to_owned(),
+            name: c.name.to_owned(),
+            email: c.email.to_owned(),
+            phone: c.phone.to_owned(),
+            tax_number: c.tax_number.to_owned(),
+            address: address,
+            has_user: c.has_user,
+            users: c.users.to_owned(),
+            date_created: date_created,
+            created_by: c.created_by.to_owned(),
         }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct UserNew {
-    username: String,
-    email: String,
+pub struct CustomerNew {
     name: String,
+    email: String,
     phone: String,
+    tax_number: String,
+    zip: String,
+    location: String,
+    address: String,
 }
 
-impl UserNew {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CustomerUpdateForm {
+    name: String,
+    email: String,
+    phone: String,
+    tax_number: String,
+    zip: String,
+    location: String,
+    address: String,
+}
+
+impl CustomerNew {
     fn to_request(self, created_by: UserId) -> CreateNewRequest {
         CreateNewRequest {
-            username: self.username,
-            email: self.email,
             name: self.name,
+            email: self.email,
             phone: self.phone,
+            tax_number: self.tax_number,
+            zip: self.zip,
+            location: self.location,
+            address: self.address,
             created_by: created_by.into(),
         }
     }
 }
 
-pub async fn new_password(
+pub async fn create_new(
     userid: UserId,
-    mut client: UserClient<Channel>,
-    new_password_form: NewPasswordForm,
+    mut client: CustomerClient<Channel>,
+    customer_object: CustomerNew,
 ) -> ApiResult {
-    let p1 = match new_password_form.password1 {
-        Some(_pwd) => _pwd,
-        None => return Err(ApiError::bad_request("jelszó1 kötelező").into()),
-    };
-    let p2 = match new_password_form.password2 {
-        Some(_pwd) => _pwd,
-        None => return Err(ApiError::bad_request("jelszó2 kötelező").into()),
-    };
-    if &p1 != &p2 {
-        return Err(ApiError::BadRequest("A megadott jelszavak nem egyeznek meg!".into()).into());
-    }
-    client
-        .set_new_password(NewPasswordRequest {
-            userid: userid.into(),
-            new_password: p1,
-        })
+    let customer = client
+        .create_new(customer_object.to_request(userid))
         .await
-        .map_err(|e| ApiError::from(e))?;
-    Ok(reply::json(&()))
+        .map_err(|e| ApiError::from(e))?
+        .into_inner();
+    if let Some(customer) = customer.customer {
+        let _user: Customer = (&customer).into();
+        return Ok(reply::json(&_user));
+    }
+    Err(ApiError::not_found().into())
 }
 
-pub async fn update_profile(
+pub async fn get_all(_: UserId, mut client: CustomerClient<Channel>) -> ApiResult {
+    let all = client.get_all(()).await.unwrap().into_inner();
+    let v = all
+        .customers
+        .iter()
+        .map(|u| u.into())
+        .collect::<Vec<Customer>>();
+    Ok(warp::reply::json(&v))
+}
+
+pub async fn get_by_id(
+    id: String,
+    userid: UserId,
+    mut client: CustomerClient<Channel>,
+) -> ApiResult {
+    let customer = client
+        .get_by_id(GetByIdRequest { customer_id: id })
+        .await
+        .map_err(|e| ApiError::from(e))?
+        .into_inner();
+    if let Some(customer) = customer.customer {
+        let _user: Customer = (&customer).into();
+        return Ok(reply::json(&_user));
+    }
+    Err(ApiError::not_found().into())
+}
+
+pub async fn update(
+    customer_id: String,
     _: UserId,
-    mut client: UserClient<Channel>,
-    profile: User,
+    mut client: CustomerClient<Channel>,
+    customer_form: CustomerUpdateForm,
 ) -> ApiResult {
     let res = client
         .update_by_id(UpdateByIdRequest {
-            user: Some(UserObj {
-                id: profile.username,
-                name: profile.name,
-                email: profile.email,
-                phone: profile.phone,
-                customers: profile.customers,
-                created_by: profile.created_by,
-                created_at: profile.date_created,
+            customer_id: customer_id.clone(),
+            customer: Some(CustomerUpdateObj {
+                id: customer_id,
+                name: customer_form.name,
+                email: customer_form.email,
+                phone: customer_form.phone,
+                tax_number: customer_form.tax_number,
+                address: Some(protos::customer::Address {
+                    zip: customer_form.zip,
+                    location: customer_form.location,
+                    address: customer_form.address,
+                }),
             }),
         })
         .await
         .map_err(|e| ApiError::from(e))?
         .into_inner();
-    let user: User = (&res.user.unwrap()).into();
-    Ok(warp::reply::json(&user))
-}
-
-pub async fn get_all(_: UserId, mut client: UserClient<Channel>) -> ApiResult {
-    let all = client.get_all(()).await.unwrap().into_inner();
-    let v = all.users.iter().map(|u| u.into()).collect::<Vec<User>>();
-    Ok(warp::reply::json(&v))
-}
-
-pub async fn get_profile(userid: UserId, mut client: UserClient<Channel>) -> ApiResult {
-    let user = client
-        .get_by_id(GetByIdRequest {
-            userid: userid.into(),
-        })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-    if let Some(user) = user.user {
-        let _user: User = (&user).into();
-        return Ok(reply::json(&_user));
-    }
-    Err(ApiError::not_found().into())
-}
-
-pub async fn get_by_id(id: String, userid: UserId, mut client: UserClient<Channel>) -> ApiResult {
-    let user = client
-        .get_by_id(GetByIdRequest { userid: id })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-    if let Some(user) = user.user {
-        let _user: User = (&user).into();
-        return Ok(reply::json(&_user));
-    }
-    Err(ApiError::not_found().into())
-}
-
-pub async fn create_new(
-    userid: UserId,
-    mut client: UserClient<Channel>,
-    user_object: UserNew,
-) -> ApiResult {
-    let user = client
-        .create_new(user_object.to_request(userid))
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-    if let Some(user) = user.user {
-        let _user: User = (&user).into();
-        return Ok(reply::json(&_user));
-    }
-    Err(ApiError::not_found().into())
+    let customer: Customer = (&res.customer.unwrap()).into();
+    Ok(warp::reply::json(&customer))
 }
