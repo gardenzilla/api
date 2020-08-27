@@ -1,3 +1,5 @@
+#[macro_use]
+mod balance;
 mod handler;
 
 use protos;
@@ -133,11 +135,23 @@ async fn main() {
         .and(warp::body::json())
         .and_then(handler::product::create_new);
 
-    let product =
-        warp::path!("product" / ..).and(product_get_all.or(product_get_by_id).or(product_new));
+    let product_update = warp::path::param()
+        .and(warp::put())
+        .and(auth())
+        .and(with_db(client_product.clone()))
+        .and(warp::body::json())
+        .and_then(handler::product::update);
+
+    let product = warp::path!("product" / ..).and(
+        product_get_all
+            .or(product_get_by_id)
+            .or(product_new)
+            .or(product_update),
+    );
 
     // Compose routes
-    let routes = warp::any().and(welcome.or(login).or(profile).or(user).or(product));
+    let routes = warp::any().and(balanced_or_tree!(welcome, login, profile, user, product));
+    // let routes = warp::any().and(welcome.or(login).or(profile).or(user).or(product));
 
     // Init server
     warp::serve(warp::any().and(routes).recover(handle_rejection))
