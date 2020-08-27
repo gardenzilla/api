@@ -1,6 +1,7 @@
 mod handler;
 
 use protos;
+use protos::product::*;
 use protos::user::*;
 use warp::*;
 
@@ -10,6 +11,7 @@ mod error;
 use error::*;
 mod login;
 use login::UserId;
+use product_client::ProductClient;
 use user_client::UserClient;
 
 fn auth() -> impl Filter<Extract = (UserId,), Error = Rejection> + Copy {
@@ -36,6 +38,8 @@ where
 async fn main() {
     // Service init
     let client = UserClient::connect("http://[::1]:50051").await.unwrap();
+    let client_product = ProductClient::connect("http://[::1]:50054").await.unwrap();
+
     let welcome = warp::path::end().map(|| format!("Welcome to Gardenzilla API"));
 
     /*
@@ -106,8 +110,34 @@ async fn main() {
 
     let user = warp::path!("user" / ..).and(user_get_all.or(user_get_by_id).or(user_new));
 
+    /*
+     * Product routes
+     */
+
+    let product_get_all = warp::path!("all")
+        .and(warp::get())
+        .and(auth())
+        .and(with_db(client_product.clone()))
+        .and_then(handler::product::get_all);
+
+    let product_get_by_id = warp::path::param()
+        .and(warp::get())
+        .and(auth())
+        .and(with_db(client_product.clone()))
+        .and_then(handler::product::get_by_id);
+
+    let product_new = warp::path!("new")
+        .and(warp::post())
+        .and(auth())
+        .and(with_db(client_product.clone()))
+        .and(warp::body::json())
+        .and_then(handler::product::create_new);
+
+    let product =
+        warp::path!("product" / ..).and(product_get_all.or(product_get_by_id).or(product_new));
+
     // Compose routes
-    let routes = warp::any().and(welcome.or(login).or(profile).or(user));
+    let routes = warp::any().and(welcome.or(login).or(profile).or(user).or(product));
 
     // Init server
     warp::serve(warp::any().and(routes).recover(handle_rejection))
