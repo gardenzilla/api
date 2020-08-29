@@ -34,7 +34,7 @@ pub async fn login(mut client: UserClient<Channel>, login_form: LoginForm) -> Ap
             password: login_form.password,
         })
         .await
-        .unwrap()
+        .map_err(|e| ApiError::from(e))?
         .into_inner();
     let uid = match res.is_valid {
         true => login_form.username,

@@ -117,7 +117,11 @@ pub async fn create_new(
 }
 
 pub async fn get_all(_: UserId, mut client: CustomerClient<Channel>) -> ApiResult {
-    let all = client.get_all(()).await.unwrap().into_inner();
+    let all = client
+        .get_all(())
+        .await
+        .map_err(|e| ApiError::from(e))?
+        .into_inner();
     let v = all
         .customers
         .iter()
@@ -149,7 +153,7 @@ pub async fn update(
     mut client: CustomerClient<Channel>,
     customer_form: CustomerUpdateForm,
 ) -> ApiResult {
-    let res = client
+    let res = match client
         .update_by_id(UpdateByIdRequest {
             customer_id: customer_id.clone(),
             customer: Some(CustomerUpdateObj {
@@ -167,7 +171,14 @@ pub async fn update(
         })
         .await
         .map_err(|e| ApiError::from(e))?
-        .into_inner();
-    let customer: Customer = (&res.customer.unwrap()).into();
+        .into_inner()
+        .customer
+    {
+        Some(c) => c,
+        None => {
+            return Err(ApiError::internal_error("Not customer object in update response").into())
+        }
+    };
+    let customer: Customer = (&res).into();
     Ok(warp::reply::json(&customer))
 }

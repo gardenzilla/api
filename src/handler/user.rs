@@ -112,12 +112,16 @@ pub async fn update_profile(
         .await
         .map_err(|e| ApiError::from(e))?
         .into_inner();
-    let user: User = (&res.user.unwrap()).into();
+    let user: User = (&res.user.unwrap_or_default()).into();
     Ok(warp::reply::json(&user))
 }
 
 pub async fn get_all(_: UserId, mut client: UserClient<Channel>) -> ApiResult {
-    let all = client.get_all(()).await.unwrap().into_inner();
+    let all = client
+        .get_all(())
+        .await
+        .map_err(|e| ApiError::from(e))?
+        .into_inner();
     let v = all.users.iter().map(|u| u.into()).collect::<Vec<User>>();
     Ok(warp::reply::json(&v))
 }

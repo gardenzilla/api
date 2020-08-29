@@ -60,7 +60,11 @@ impl NewProductForm {
 }
 
 pub async fn get_all(_: UserId, mut client: ProductClient<Channel>) -> ApiResult {
-    let all = client.get_all(()).await.unwrap().into_inner();
+    let all = client
+        .get_all(())
+        .await
+        .map_err(|e| ApiError::from(e))?
+        .into_inner();
     let v = all
         .products
         .iter()
