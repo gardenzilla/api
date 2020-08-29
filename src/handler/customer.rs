@@ -128,7 +128,7 @@ pub async fn get_all(_: UserId, mut client: CustomerClient<Channel>) -> ApiResul
 
 pub async fn get_by_id(
     id: String,
-    userid: UserId,
+    _userid: UserId,
     mut client: CustomerClient<Channel>,
 ) -> ApiResult {
     let customer = client

@@ -5,6 +5,7 @@ mod handler;
 use protos;
 use protos::product::*;
 use protos::{customer::customer_client::CustomerClient, user::*};
+use std::error::Error;
 use warp::*;
 
 mod prelude;
@@ -14,6 +15,7 @@ use error::*;
 mod login;
 use login::UserId;
 use product_client::ProductClient;
+use tokio::{signal, sync::oneshot};
 use user_client::UserClient;
 
 fn auth() -> impl Filter<Extract = (UserId,), Error = Rejection> + Copy {
@@ -37,7 +39,7 @@ where
 }
 
 #[tokio::main(max_threads = 10_000)]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     // Service init
     let client = UserClient::connect("http://[::1]:50051").await.unwrap();
     let client_product = ProductClient::connect("http://[::1]:50054").await.unwrap();
@@ -193,8 +195,26 @@ async fn main() {
     ));
     // let routes = warp::any().and(welcome.or(login).or(profile).or(user).or(product));
 
+    // Create shutdown channel
+    let (tx, rx) = oneshot::channel();
+
     // Init server
-    warp::serve(warp::any().and(routes).recover(handle_rejection))
-        .run(([127, 0, 0, 1], 3030))
-        .await;
+    let (addr, server) = warp::serve(warp::any().and(routes).recover(handle_rejection))
+        .bind_with_graceful_shutdown(([127, 0, 0, 1], 3030), async {
+            rx.await.ok();
+        });
+
+    println!("API is running at {}", addr);
+
+    // Spawn the server into a runtime
+    tokio::task::spawn(server);
+
+    signal::ctrl_c().await?;
+
+    println!("SIGTERM");
+
+    // Send shutdown signal after SIGTERM received
+    let _ = tx.send(());
+
+    Ok(())
 }

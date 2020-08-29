@@ -1,5 +1,4 @@
 use crate::prelude::*;
-use crate::UserId;
 use protos;
 use protos::user::user_client::UserClient;
 use protos::user::*;

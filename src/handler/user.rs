@@ -137,7 +137,7 @@ pub async fn get_profile(userid: UserId, mut client: UserClient<Channel>) -> Api
     Err(ApiError::not_found().into())
 }
 
-pub async fn get_by_id(id: String, userid: UserId, mut client: UserClient<Channel>) -> ApiResult {
+pub async fn get_by_id(id: String, _userid: UserId, mut client: UserClient<Channel>) -> ApiResult {
     let user = client
         .get_by_id(GetByIdRequest { userid: id })
         .await
