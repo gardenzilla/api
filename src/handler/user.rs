@@ -117,13 +117,17 @@ pub async fn update_profile(
 }
 
 pub async fn get_all(_: UserId, mut client: UserClient<Channel>) -> ApiResult {
-    let all = client
+    let mut all = client
         .get_all(())
         .await
         .map_err(|e| ApiError::from(e))?
         .into_inner();
-    let v = all.users.iter().map(|u| u.into()).collect::<Vec<User>>();
-    Ok(warp::reply::json(&v))
+
+    let mut result: Vec<User> = Vec::new();
+    while let Some(user) = all.message().await.map_err(|e| ApiError::from(e))? {
+        result.push((&user).into());
+    }
+    Ok(warp::reply::json(&result))
 }
 
 pub async fn get_profile(userid: UserId, mut client: UserClient<Channel>) -> ApiResult {
