@@ -8,8 +8,7 @@ use warp::reply;
 
 #[derive(Serialize)]
 pub struct ApiLoginResponse {
-  pub uid: u32,
-  pub alias: String,
+  pub username: String,
   pub token: String,
 }
 
@@ -38,17 +37,21 @@ pub async fn login(mut client: UserClient<Channel>, login_form: LoginForm) -> Ap
     .map_err(|e| ApiError::from(e))?
     .into_inner();
 
+  // Get userobj
   let userobj = match res.user {
-    Some(uobj) => uobj,
-    None => return Err(ApiError::bad_request("Hibás belépési adatok").into()),
+    Some(userobj) => userobj,
+    None => return Err(ApiError::bad_request("A megadott userobjektum üres").into()),
   };
 
-  let token = crate::login::create_token(userobj.id).map_err(|err| ApiError::from(err))?;
+  let uid = match res.is_valid {
+    true => login_form.username,
+    false => return Err(ApiError::bad_request("Hibás belépési adatok").into()),
+  };
 
+  let token = crate::login::create_token(uid).map_err(|err| ApiError::from(err))?;
   Ok(reply::json(&ApiLoginResponse {
     token: token,
-    uid: userobj.id,
-    alias: userobj.alias,
+    username: userobj.id,
   }))
 }
 

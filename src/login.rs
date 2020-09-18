@@ -21,30 +21,30 @@ use serde::{Deserialize, Serialize};
 use std::default::Default;
 
 const SECRET_ENV_KEY: &'static str = "API_SECRET";
-pub struct UserId(u32);
+pub struct UserId(String);
 
 impl UserId {
-  fn new(uid: u32) -> Self {
+  fn new(uid: String) -> Self {
     UserId(uid)
   }
 }
 
 impl std::ops::Deref for UserId {
-  type Target = u32;
+  type Target = str;
   fn deref(&self) -> &Self::Target {
     &self.0
   }
 }
 
-// impl From<UserId> for String {
-//   fn from(userid: UserId) -> Self {
-//     userid.0
-//   }
-// }
+impl From<UserId> for String {
+  fn from(userid: UserId) -> Self {
+    userid.0
+  }
+}
 
 #[derive(Default, Deserialize, Serialize, RustcDecodable, RustcEncodable)]
 struct Custom {
-  uid: u32,
+  uid: String,
   rhino: bool,
 }
 
@@ -55,7 +55,7 @@ pub enum LoginError {
 
 pub type LoginResult<T> = Result<T, LoginError>;
 
-pub fn create_token(uid: u32) -> LoginResult<String> {
+pub fn create_token(uid: String) -> LoginResult<String> {
   let header: Header = Default::default();
   let claims = Custom {
     uid: uid,

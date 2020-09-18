@@ -16,16 +16,16 @@ pub struct Address {
 
 #[derive(Serialize, Deserialize)]
 pub struct Customer {
-  id: u32,
+  id: String,
   name: String,
   email: String,
   phone: String,
   tax_number: String,
   address: Address,
   has_user: bool,
-  users: Vec<u32>,
-  date_created: i64,
-  created_by: u32,
+  users: Vec<String>,
+  date_created: String,
+  created_by: String,
 }
 
 impl From<&CustomerObj> for Customer {
@@ -52,7 +52,7 @@ impl From<&CustomerObj> for Customer {
       address: address,
       has_user: c.has_user,
       users: c.users.to_owned(),
-      date_created: c.date_created,
+      date_created: c.date_created.to_owned(),
       created_by: c.created_by.to_owned(),
     }
   }
@@ -90,7 +90,7 @@ impl CustomerNew {
       zip: self.zip,
       location: self.location,
       address: self.address,
-      created_by: *created_by,
+      created_by: created_by.to_string(),
     }
   }
 }
@@ -126,7 +126,11 @@ pub async fn get_all(_: UserId, mut client: CustomerClient<Channel>) -> ApiResul
   Ok(warp::reply::json(&v))
 }
 
-pub async fn get_by_id(id: u32, _userid: UserId, mut client: CustomerClient<Channel>) -> ApiResult {
+pub async fn get_by_id(
+  id: String,
+  _userid: UserId,
+  mut client: CustomerClient<Channel>,
+) -> ApiResult {
   let customer = client
     .get_by_id(GetByIdRequest { customer_id: id })
     .await
@@ -140,14 +144,14 @@ pub async fn get_by_id(id: u32, _userid: UserId, mut client: CustomerClient<Chan
 }
 
 pub async fn update(
-  customer_id: u32,
+  customer_id: String,
   _: UserId,
   mut client: CustomerClient<Channel>,
   customer_form: CustomerUpdateForm,
 ) -> ApiResult {
   let res = match client
     .update_by_id(UpdateByIdRequest {
-      customer_id: customer_id,
+      customer_id: customer_id.clone(),
       customer: Some(CustomerUpdateObj {
         id: customer_id,
         name: customer_form.name,

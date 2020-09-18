@@ -23,23 +23,23 @@ pub struct UpdateProductForm {
 
 #[derive(Serialize, Deserialize)]
 pub struct Product {
-  pub sku: u32,
+  pub sku: String,
   pub name: String,
   pub quantity: String,
   pub unit: String,
-  pub date_created: i64,
-  pub created_by: u32,
+  pub date_created: String,
+  pub created_by: String,
 }
 
 impl From<&ProductObj> for Product {
   fn from(p: &ProductObj) -> Self {
     Self {
-      sku: p.sku,
+      sku: p.sku.to_owned(),
       name: p.name.to_owned(),
       quantity: p.quantity.to_owned(),
       unit: p.unit.to_owned(),
-      date_created: p.created_at,
-      created_by: p.created_by,
+      date_created: p.created_at.to_owned(),
+      created_by: p.created_by.to_string(),
     }
   }
 }
@@ -50,7 +50,7 @@ impl NewProductForm {
       name: self.name,
       quantity: self.quantity,
       unit: self.unit,
-      created_by: *created_by,
+      created_by: created_by.into(),
     }
   }
 }
@@ -87,7 +87,7 @@ pub async fn get_by_id(
 }
 
 pub async fn update(
-  sku: u32,
+  sku: String,
   _: UserId,
   mut client: ProductClient<Channel>,
   p: UpdateProductForm,
