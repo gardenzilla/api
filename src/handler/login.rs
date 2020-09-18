@@ -37,15 +37,15 @@ pub async fn login(mut client: UserClient<Channel>, login_form: LoginForm) -> Ap
     .map_err(|e| ApiError::from(e))?
     .into_inner();
 
+  let uid = match res.is_valid {
+    true => login_form.username,
+    false => return Err(ApiError::bad_request("Hibás belépési adatok").into()),
+  };
+
   // Get userobj
   let userobj = match res.user {
     Some(userobj) => userobj,
     None => return Err(ApiError::bad_request("A megadott userobjektum üres").into()),
-  };
-
-  let uid = match res.is_valid {
-    true => login_form.username,
-    false => return Err(ApiError::bad_request("Hibás belépési adatok").into()),
   };
 
   let token = crate::login::create_token(uid).map_err(|err| ApiError::from(err))?;
