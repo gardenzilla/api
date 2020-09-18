@@ -9,107 +9,103 @@ use warp::reply;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewProductForm {
-    name: String,
-    quantity: String,
-    unit: String,
+  name: String,
+  quantity: String,
+  unit: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateProductForm {
-    name: String,
-    quantity: String,
-    unit: String,
+  name: String,
+  quantity: String,
+  unit: String,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct Product {
-    pub sku: String,
-    pub name: String,
-    pub quantity: String,
-    pub unit: String,
-    pub date_created: String,
-    pub created_by: String,
+  pub sku: u32,
+  pub name: String,
+  pub quantity: String,
+  pub unit: String,
+  pub date_created: i64,
+  pub created_by: u32,
 }
 
 impl From<&ProductObj> for Product {
-    fn from(p: &ProductObj) -> Self {
-        let date_created = match &p.created_at {
-            Some(d) => d.rfc_3399.to_owned(),
-            None => "".to_owned(),
-        };
-        Self {
-            sku: p.sku.to_owned(),
-            name: p.name.to_owned(),
-            quantity: p.quantity.to_owned(),
-            unit: p.unit.to_owned(),
-            date_created: date_created,
-            created_by: p.created_by.to_string(),
-        }
+  fn from(p: &ProductObj) -> Self {
+    Self {
+      sku: p.sku,
+      name: p.name.to_owned(),
+      quantity: p.quantity.to_owned(),
+      unit: p.unit.to_owned(),
+      date_created: p.created_at,
+      created_by: p.created_by,
     }
+  }
 }
 
 impl NewProductForm {
-    fn to_request(self, created_by: UserId) -> CreateNewRequest {
-        CreateNewRequest {
-            name: self.name,
-            quantity: self.quantity,
-            unit: self.unit,
-            created_by: created_by.into(),
-        }
+  fn to_request(self, created_by: UserId) -> CreateNewRequest {
+    CreateNewRequest {
+      name: self.name,
+      quantity: self.quantity,
+      unit: self.unit,
+      created_by: *created_by,
     }
+  }
 }
 
 pub async fn get_all(_: UserId, mut client: ProductClient<Channel>) -> ApiResult {
-    let all = client
-        .get_all(())
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-    let v = all
-        .products
-        .iter()
-        .map(|u| u.into())
-        .collect::<Vec<Product>>();
-    Ok(warp::reply::json(&v))
+  let all = client
+    .get_all(())
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+  let v = all
+    .products
+    .iter()
+    .map(|u| u.into())
+    .collect::<Vec<Product>>();
+  Ok(warp::reply::json(&v))
 }
 
 pub async fn get_by_id(
-    sku: String,
-    _userid: UserId,
-    mut client: ProductClient<Channel>,
+  sku: String,
+  _userid: UserId,
+  mut client: ProductClient<Channel>,
 ) -> ApiResult {
-    let user = client
-        .get_by_id(GetByIdRequest { sku: sku })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-    if let Some(product) = user.product {
-        let _product: Product = (&product).into();
-        return Ok(reply::json(&_product));
-    }
-    Err(ApiError::not_found().into())
+  let user = client
+    .get_by_id(GetByIdRequest { sku: sku })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+  if let Some(product) = user.product {
+    let _product: Product = (&product).into();
+    return Ok(reply::json(&_product));
+  }
+  Err(ApiError::not_found().into())
 }
 
 pub async fn update(
-    sku: String,
-    _: UserId,
-    mut client: ProductClient<Channel>,
-    p: UpdateProductForm,
+  sku: u32,
+  _: UserId,
+  mut client: ProductClient<Channel>,
+  p: UpdateProductForm,
 ) -> ApiResult {
-    let res = client
-        .update_by_id(UpdateByIdRequest {
-            product: Some(ProductUpdateObj {
-                sku: sku,
-                name: p.name.to_owned(),
-                quantity: p.quantity.to_owned(),
-                unit: p.unit.to_owned(),
-            }),
-        })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-    let user: Product = (&res.product.unwrap_or_default()).into();
-    Ok(warp::reply::json(&user))
+  let res = client
+    .update_by_id(UpdateByIdRequest {
+      product: Some(ProductUpdateObj {
+        sku: sku,
+        name: p.name.to_owned(),
+        quantity: p.quantity.to_owned(),
+        unit: p.unit.to_owned(),
+      }),
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+  let user: Product = (&res.product.unwrap_or_default()).into();
+  Ok(warp::reply::json(&user))
 }
 
 // pub async fn new_product(
@@ -197,18 +193,18 @@ pub async fn update(
 // }
 
 pub async fn create_new(
-    userid: UserId,
-    mut client: ProductClient<Channel>,
-    new_product: NewProductForm,
+  userid: UserId,
+  mut client: ProductClient<Channel>,
+  new_product: NewProductForm,
 ) -> ApiResult {
-    let product = client
-        .create_new(new_product.to_request(userid))
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-    if let Some(product) = product.product {
-        let _prod: Product = (&product).into();
-        return Ok(reply::json(&_prod));
-    }
-    Err(ApiError::not_found().into())
+  let product = client
+    .create_new(new_product.to_request(userid))
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+  if let Some(product) = product.product {
+    let _prod: Product = (&product).into();
+    return Ok(reply::json(&_prod));
+  }
+  Err(ApiError::not_found().into())
 }
