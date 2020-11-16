@@ -8,6 +8,7 @@ use crate::handler;
 use crate::login;
 use crate::login::UserId;
 use crate::prelude::*;
+use gzlib::proto::invoice::invoice_client::InvoiceClient;
 use product_client::ProductClient;
 use user_client::UserClient;
 
@@ -35,6 +36,7 @@ pub async fn get_all() -> warp::filters::BoxedFilter<(impl Reply,)> {
     let client = UserClient::connect("http://[::1]:50051").await.unwrap();
     let client_product = ProductClient::connect("http://[::1]:50054").await.unwrap();
     let client_customer = CustomerClient::connect("http://[::1]:50055").await.unwrap();
+    let client_invoice = InvoiceClient::connect("http://[::1]:50060").await.unwrap();
 
     let welcome = warp::path::end().map(|| format!("Welcome to Gardenzilla API"));
 
@@ -110,6 +112,18 @@ pub async fn get_all() -> warp::filters::BoxedFilter<(impl Reply,)> {
         .or(user_get_by_id)
         .or(user_new)));
 
+    /**
+     * Invoice routes
+     */
+    let invoice_new = warp::path!("new")
+        .and(warp::post())
+        .and(auth())
+        .and(with_db(client_invoice.clone()))
+        .and(warp::body::json())
+        .and_then(handler::invoice::new_invoice);
+
+    let invoice = warp::path!("invoice" / ..).and(balanced_or_tree!(invoice_new));
+
     /*
      * Product routes
      */
@@ -182,7 +196,7 @@ pub async fn get_all() -> warp::filters::BoxedFilter<(impl Reply,)> {
 
     // Compose routes
     let routes = warp::any().and(balanced_or_tree!(
-        welcome, login, profile, user, product, customer
+        welcome, login, profile, user, product, customer, invoice
     ));
 
     return routes.boxed();

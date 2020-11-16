@@ -7,6 +7,7 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+gzlib = "*"
 jwt = "0.4"
 log = "0.4.11"
 pretty_env_logger = "0.4.0"
