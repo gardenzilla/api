@@ -3,14 +3,14 @@
 
 release:
 	cargo update
-	cargo test
 	cargo build --release
+	cargo test
 	strip target/release/api
 
 build:
 	cargo update
-	cargo test
 	cargo build
+	cargo test
 
 dev:
 	# . ./ENV.sh; backper
