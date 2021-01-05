@@ -1,6 +1,6 @@
-use crate::protos;
-use protos::product::*;
-use protos::{customer::customer_client::CustomerClient, user::*};
+use gzlib::proto;
+use proto::product::*;
+use proto::{customer::customer_client::CustomerClient, user::*};
 use warp::*;
 
 use crate::error::*;
