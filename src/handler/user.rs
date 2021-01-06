@@ -1,47 +1,35 @@
-use crate::prelude::*;
-use crate::UserId;
-use protos;
-use protos::user::user_client::UserClient;
-use protos::user::*;
+use crate::{prelude::*, services::Services};
+use gzlib::proto::{email::EmailRequest, user::*};
 use serde::{Deserialize, Serialize};
-use tonic::transport::Channel;
 use warp::reply;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewPasswordForm {
-  password1: Option<String>,
-  password2: Option<String>,
+  password1: String,
+  password2: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct User {
+  pub uid: u32,
   pub username: String,
+  pub name: String,
   pub email: String,
   pub phone: String,
-  pub name: String,
-  pub date_created: String,
-  pub created_by: String,
-  // ================
-  // Important!
-  // ================
-  // Only READONLY
-  // We do not use it to store any value from form
-  // Instead we use direct API call for update customers
-  //      ||
-  //      \/
-  pub customers: Vec<String>,
+  pub created_at: String, // RFC3339
+  pub created_by: u32,    // UID
 }
 
-impl From<&UserObj> for User {
-  fn from(u: &UserObj) -> Self {
+impl From<UserObj> for User {
+  fn from(u: UserObj) -> Self {
     User {
-      username: u.id.to_string(),
+      uid: u.uid,
+      username: u.username.to_string(),
+      name: u.name.to_string(),
       email: u.email.to_string(),
       phone: u.phone.to_string(),
-      name: u.name.to_string(),
-      date_created: u.created_at.to_string(),
-      created_by: u.created_by.to_string(),
-      customers: u.customers.to_owned(),
+      created_at: u.created_at,
+      created_by: u.created_by,
     }
   }
 }
@@ -49,75 +37,73 @@ impl From<&UserObj> for User {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UserNew {
   username: String,
-  email: String,
   name: String,
+  email: String,
   phone: String,
 }
 
-impl UserNew {
-  fn to_request(self, created_by: UserId) -> CreateNewRequest {
-    CreateNewRequest {
-      id: self.username,
-      email: self.email,
-      name: self.name,
-      phone: self.phone,
-      created_by: created_by.into(),
-    }
-  }
-}
-
 pub async fn new_password(
-  userid: UserId,
-  mut client: UserClient<Channel>,
+  userid: u32,
+  mut services: Services,
   new_password_form: NewPasswordForm,
 ) -> ApiResult {
-  let p1 = match new_password_form.password1 {
-    Some(_pwd) => _pwd,
-    None => return Err(ApiError::bad_request("jelszó1 kötelező").into()),
-  };
-  let p2 = match new_password_form.password2 {
-    Some(_pwd) => _pwd,
-    None => return Err(ApiError::bad_request("jelszó2 kötelező").into()),
-  };
-  if &p1 != &p2 {
+  if &new_password_form.password1 != &new_password_form.password2 {
     return Err(ApiError::BadRequest("A megadott jelszavak nem egyeznek meg!".into()).into());
   }
-  client
+
+  services
+    .user
     .set_new_password(NewPasswordRequest {
-      userid: userid.into(),
-      new_password: p1,
+      uid: userid,
+      new_password: new_password_form.password1,
     })
     .await
     .map_err(|e| ApiError::from(e))?;
-  Ok(reply::json(&()))
-}
 
-pub async fn update_profile(
-  _: UserId,
-  mut client: UserClient<Channel>,
-  profile: User,
-) -> ApiResult {
-  let res = client
-    .update_by_id(UpdateByIdRequest {
-      user: Some(UserObj {
-        id: profile.username,
-        name: profile.name,
-        email: profile.email,
-        phone: profile.phone,
-        customers: profile.customers,
-        created_by: profile.created_by,
-        created_at: profile.date_created,
-      }),
-    })
+  // Get userobject
+  let user = services
+    .user
+    .get_by_id(GetByIdRequest { userid: userid })
     .await
     .map_err(|e| ApiError::from(e))?
     .into_inner();
-  let user: User = (&res.user.unwrap_or_default()).into();
-  Ok(warp::reply::json(&user))
+
+  // Send email
+  services
+    .email
+    .send_email(EmailRequest {
+      to: user.email,
+      subject: "Új jelszó beállítva".into(),
+      body: "Új jelszó lett beállítva a Gardenzilla fiókodban.".into(),
+    })
+    .await
+    .map_err(|_| ApiError::internal_error("Hiba az email elküldésekor"))?;
+
+  Ok(reply::json(&()))
 }
 
-pub async fn get_all(_: UserId, mut client: UserClient<Channel>) -> ApiResult {
-  let mut all = client
+pub async fn update_profile(_: u32, mut services: Services, u: User) -> ApiResult {
+  let res: User = services
+    .user
+    .update_by_id(UserObj {
+      uid: u.uid,
+      username: u.username,
+      name: u.name,
+      email: u.email,
+      phone: u.phone,
+      created_by: u.created_by,
+      created_at: u.created_at,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
+  Ok(warp::reply::json(&res))
+}
+
+pub async fn get_all(_: u32, mut services: Services) -> ApiResult {
+  let mut all = services
+    .user
     .get_all(())
     .await
     .map_err(|e| ApiError::from(e))?
@@ -125,52 +111,46 @@ pub async fn get_all(_: UserId, mut client: UserClient<Channel>) -> ApiResult {
 
   let mut result: Vec<User> = Vec::new();
   while let Some(user) = all.message().await.map_err(|e| ApiError::from(e))? {
-    result.push((&user).into());
+    result.push(user.into());
   }
   Ok(warp::reply::json(&result))
 }
 
-pub async fn get_profile(userid: UserId, mut client: UserClient<Channel>) -> ApiResult {
-  let user = client
-    .get_by_id(GetByIdRequest {
-      userid: userid.into(),
+pub async fn get_profile(userid: u32, mut services: Services) -> ApiResult {
+  let user: User = services
+    .user
+    .get_by_id(GetByIdRequest { userid })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
+  Ok(reply::json(&user))
+}
+
+pub async fn get_by_id(userid: u32, _uid: u32, mut services: Services) -> ApiResult {
+  let user: User = services
+    .user
+    .get_by_id(GetByIdRequest { userid })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
+  Ok(reply::json(&user))
+}
+
+pub async fn create_new(userid: u32, mut services: Services, uo: UserNew) -> ApiResult {
+  let user: User = services
+    .user
+    .create_user(NewUserObj {
+      username: uo.username,
+      name: uo.name,
+      email: uo.email,
+      phone: uo.phone,
+      created_by: userid,
     })
     .await
     .map_err(|e| ApiError::from(e))?
-    .into_inner();
-  if let Some(user) = user.user {
-    let _user: User = (&user).into();
-    return Ok(reply::json(&_user));
-  }
-  Err(ApiError::not_found().into())
-}
-
-pub async fn get_by_id(id: String, _userid: UserId, mut client: UserClient<Channel>) -> ApiResult {
-  let user = client
-    .get_by_id(GetByIdRequest { userid: id })
-    .await
-    .map_err(|e| ApiError::from(e))?
-    .into_inner();
-  if let Some(user) = user.user {
-    let _user: User = (&user).into();
-    return Ok(reply::json(&_user));
-  }
-  Err(ApiError::not_found().into())
-}
-
-pub async fn create_new(
-  userid: UserId,
-  mut client: UserClient<Channel>,
-  user_object: UserNew,
-) -> ApiResult {
-  let user = client
-    .create_new(user_object.to_request(userid))
-    .await
-    .map_err(|e| ApiError::from(e))?
-    .into_inner();
-  if let Some(user) = user.user {
-    let _user: User = (&user).into();
-    return Ok(reply::json(&_user));
-  }
-  Err(ApiError::not_found().into())
+    .into_inner()
+    .into();
+  Ok(reply::json(&user))
 }

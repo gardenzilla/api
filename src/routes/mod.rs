@@ -1,15 +1,9 @@
-use gzlib::proto;
-use proto::product::*;
-use proto::{customer::customer_client::CustomerClient, user::*};
 use warp::*;
 
+use crate::handler;
 use crate::login;
 use crate::prelude::*;
 use crate::{error::*, services::Services};
-use crate::{handler, services};
-use gzlib::proto::invoice::invoice_client::InvoiceClient;
-use product_client::ProductClient;
-use user_client::UserClient;
 
 fn auth() -> impl Filter<Extract = (u32,), Error = Rejection> + Copy {
   warp::header::optional::<String>("Token").and_then(|n: Option<String>| async move {
@@ -51,58 +45,52 @@ pub async fn get_all(services: Services) -> warp::filters::BoxedFilter<(impl Rep
   let login =
     warp::path!("login" / ..).and(balanced_or_tree!(login_action.or(login_password_reset)));
 
-  // /*
-  //  * Profile routes
-  //  */
-  // let profile_new_password = warp::path!("new_password")
-  //   .and(warp::post())
-  //   .and(auth())
-  //   .and(with_db(client.clone()))
-  //   .and(warp::body::json())
-  //   .and_then(handler::user::new_password);
+  let profile_new_password = warp::path!("new_password")
+    .and(warp::post())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::user::new_password);
 
-  // let profile_get = warp::path::end()
-  //   .and(warp::get())
-  //   .and(auth())
-  //   .and(with_db(client.clone()))
-  //   .and_then(handler::user::get_profile);
+  let profile_get = warp::path::end()
+    .and(warp::get())
+    .and(auth())
+    .and(add(services.clone()))
+    .and_then(handler::user::get_profile);
 
-  // let profile_update = warp::path::end()
-  //   .and(warp::post())
-  //   .and(auth())
-  //   .and(with_db(client.clone()))
-  //   .and(warp::body::json())
-  //   .and_then(handler::user::update_profile);
+  let profile_update = warp::path::end()
+    .and(warp::post())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::user::update_profile);
 
-  // let profile = warp::path!("profile" / ..).and(balanced_or_tree!(profile_new_password
-  //   .or(profile_get)
-  //   .or(profile_update)));
+  let profile = warp::path!("profile" / ..).and(balanced_or_tree!(profile_new_password
+    .or(profile_get)
+    .or(profile_update)));
 
-  // /*
-  //  * User routes
-  //  */
-  // let user_get_all = warp::path!("all")
-  //   .and(warp::get())
-  //   .and(auth())
-  //   .and(with_db(client.clone()))
-  //   .and_then(handler::user::get_all);
+  let user_get_all = warp::path!("all")
+    .and(warp::get())
+    .and(auth())
+    .and(add(services.clone()))
+    .and_then(handler::user::get_all);
 
-  // let user_get_by_id = warp::path::param()
-  //   .and(warp::get())
-  //   .and(auth())
-  //   .and(with_db(client.clone()))
-  //   .and_then(handler::user::get_by_id);
+  let user_get_by_id = warp::path::param()
+    .and(warp::get())
+    .and(auth())
+    .and(add(services.clone()))
+    .and_then(handler::user::get_by_id);
 
-  // let user_new = warp::path!("new")
-  //   .and(warp::post())
-  //   .and(auth())
-  //   .and(with_db(client.clone()))
-  //   .and(warp::body::json())
-  //   .and_then(handler::user::create_new);
+  let user_new = warp::path!("new")
+    .and(warp::post())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::user::create_new);
 
-  // let user = warp::path!("user" / ..).and(balanced_or_tree!(user_get_all
-  //   .or(user_get_by_id)
-  //   .or(user_new)));
+  let user = warp::path!("user" / ..).and(balanced_or_tree!(user_get_all
+    .or(user_get_by_id)
+    .or(user_new)));
 
   // /**
   //  * Invoice routes
@@ -185,7 +173,7 @@ pub async fn get_all(services: Services) -> warp::filters::BoxedFilter<(impl Rep
   //   .or(customer_update),));
 
   // Compose routes
-  let routes = warp::any().and(balanced_or_tree!(welcome, login));
+  let routes = warp::any().and(balanced_or_tree!(welcome, login, profile, user));
   // let routes = warp::any().and(balanced_or_tree!(
   //   welcome, login, profile, user, product, customer, invoice
   // ));

@@ -1,5 +1,5 @@
 use crate::{prelude::*, services::Services};
-use gzlib::proto::user::*;
+use gzlib::proto::{email::EmailRequest, user::*};
 use serde::{Deserialize, Serialize};
 use warp::reply;
 
@@ -43,10 +43,25 @@ pub async fn login(mut services: Services, login_form: LoginForm) -> ApiResult {
 }
 
 pub async fn reset_password(mut services: Services, form: FormResetPassword) -> ApiResult {
-  let _ = services
+  let res = services
     .user
-    .reset_password(ResetPasswordRequest { email: form.email })
+    .reset_password(ResetPasswordRequest {
+      email: form.email.clone(),
+    })
     .await
-    .map_err(|e| ApiError::from(e))?;
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+
+  // Send email
+  services
+    .email
+    .send_email(EmailRequest {
+      to: res.email,
+      subject: "Elfelejtett jelszó".into(),
+      body: format!("A Gardenzilla fiókodban töröltük a régi jelszavadat,\n és új jelszót állítottunk be.\n\n Az új jelszavad: {}", res.new_password),
+    })
+    .await
+    .map_err(|_| ApiError::internal_error("Hiba az email elküldésekor"))?;
+
   Ok(reply::json(&()))
 }
