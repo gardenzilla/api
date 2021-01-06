@@ -4,7 +4,6 @@ use gzlib::proto::product::{
   GetSkuRequest, NewProduct, NewSku, ProductObj, SkuObj, UpdateSkuDivideRequest,
 };
 use serde::{Deserialize, Serialize};
-use tonic::transport::Channel;
 use warp::reply;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -152,7 +151,7 @@ pub async fn get_product_bulk(_: u32, mut services: Services, product_ids: Vec<u
 
 pub async fn update_product(
   pid: u32,
-  uid: u32,
+  _uid: u32,
   mut services: Services,
   p: ProductForm,
 ) -> ApiResult {
@@ -174,7 +173,7 @@ pub async fn update_product(
   Ok(reply::json(&product))
 }
 
-pub async fn find_product(uid: u32, mut services: Services, f: FindForm) -> ApiResult {
+pub async fn find_product(_uid: u32, mut services: Services, f: FindForm) -> ApiResult {
   let product = services
     .product
     .find_product(FindProductRequest { query: f.query })
@@ -237,7 +236,7 @@ pub async fn get_sku_bulk(_: u32, mut services: Services, sku_ids: Vec<u32>) -> 
   Ok(warp::reply::json(&result))
 }
 
-pub async fn update_sku(sku: u32, uid: u32, mut services: Services, s: SkuForm) -> ApiResult {
+pub async fn update_sku(sku: u32, _uid: u32, mut services: Services, s: SkuForm) -> ApiResult {
   let sku: SkuForm = services
     .product
     .update_sku(SkuObj {
@@ -259,7 +258,7 @@ pub async fn update_sku(sku: u32, uid: u32, mut services: Services, s: SkuForm) 
   Ok(reply::json(&sku))
 }
 
-pub async fn find_sku(uid: u32, mut services: Services, f: FindForm) -> ApiResult {
+pub async fn find_sku(_uid: u32, mut services: Services, f: FindForm) -> ApiResult {
   let sku = services
     .product
     .find_sku(FindSkuRequest { query: f.query })
@@ -270,7 +269,7 @@ pub async fn find_sku(uid: u32, mut services: Services, f: FindForm) -> ApiResul
   Ok(reply::json(&sku))
 }
 
-pub async fn sku_set_divide(uid: u32, mut services: Services, f: SkuSetDivideForm) -> ApiResult {
+pub async fn sku_set_divide(_uid: u32, mut services: Services, f: SkuSetDivideForm) -> ApiResult {
   let sku: SkuForm = services
     .product
     .update_sku_divide(UpdateSkuDivideRequest {

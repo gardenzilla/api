@@ -7,7 +7,6 @@ mod route_user;
 use crate::login;
 use crate::prelude::*;
 use crate::{error::*, services::Services};
-use crate::{handler, services};
 use warp::*;
 
 // Auth helper
