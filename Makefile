@@ -1,7 +1,7 @@
 include ../ENV.list
 export $(shell sed 's/=.*//' ../ENV.list)
 
-.PHONY: release, test, dev
+.PHONY: release, test, dev, run, run_release
 
 release:
 	cargo update
@@ -15,11 +15,14 @@ build:
 	cargo test
 
 run:
-	cargo run;
+	cargo run
+
+run_release:
+	cargo run --release
 
 dev:
 	# . ./ENV.sh; backper
-	cargo run;
+	cargo run
 
 test:
 	cargo test
