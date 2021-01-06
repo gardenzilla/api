@@ -10,29 +10,6 @@ struct ErrorMessage {
   message: String,
 }
 
-// impl warp::Reply for ApiError {
-//     fn into_response(self) -> warp::reply::Response {
-//         match self {
-//             ApiError::NotFound => warp::http::Response::builder()
-//                 .status(404)
-//                 .body(hyper::body::Body::empty())
-//                 .unwrap(),
-//             ApiError::BadRequest(msg) => warp::http::Response::builder()
-//                 .status(400)
-//                 .body(msg.into())
-//                 .unwrap(),
-//             ApiError::InternalError(msg) => warp::http::Response::builder()
-//                 .status(500)
-//                 .body(msg.into())
-//                 .unwrap(),
-//             ApiError::Unauthorized => warp::http::Response::builder()
-//                 .status(401)
-//                 .body("".into())
-//                 .unwrap(),
-//         }
-//     }
-// }
-
 #[derive(Debug)]
 pub struct ApiRejection {
   code: warp::http::StatusCode,

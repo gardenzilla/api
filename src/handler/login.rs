@@ -1,14 +1,11 @@
-use crate::prelude::*;
-use protos;
-use protos::user::user_client::UserClient;
-use protos::user::*;
+use crate::{prelude::*, services::Services};
+use gzlib::proto::user::*;
 use serde::{Deserialize, Serialize};
-use tonic::transport::Channel;
 use warp::reply;
 
 #[derive(Serialize)]
 pub struct ApiLoginResponse {
-  pub username: String,
+  pub uid: u32,
   pub token: String,
 }
 
@@ -20,46 +17,35 @@ pub struct LoginForm {
 
 #[derive(Serialize, Deserialize)]
 pub struct FormResetPassword {
-  email: Option<String>,
+  email: String,
 }
 
-pub async fn login(mut client: UserClient<Channel>, login_form: LoginForm) -> ApiResult {
+pub async fn login(mut services: Services, login_form: LoginForm) -> ApiResult {
   // 1. First send username + password to user service
   // 2. Gets back the result true / false
   // 3. Create token
   // 4. Send back the token
-  let res = client
-    .validate_login(LoginRequest {
-      username: login_form.username.clone(),
+  let res = services
+    .user
+    .login(LoginRequest {
+      username: login_form.username,
       password: login_form.password,
     })
     .await
     .map_err(|e| ApiError::from(e))?
     .into_inner();
 
-  let uid = match res.is_valid {
-    true => login_form.username,
-    false => return Err(ApiError::bad_request("Hibás belépési adatok").into()),
-  };
-
-  // Get userobj
-  let userobj = match res.user {
-    Some(userobj) => userobj,
-    None => return Err(ApiError::bad_request("A megadott userobjektum üres").into()),
-  };
-
-  let token = crate::login::create_token(uid).map_err(|err| ApiError::from(err))?;
+  let token = crate::login::create_token(res.uid).map_err(|err| ApiError::from(err))?;
   Ok(reply::json(&ApiLoginResponse {
     token: token,
-    username: userobj.id,
+    uid: res.uid,
   }))
 }
 
-pub async fn reset_password(mut client: UserClient<Channel>, form: FormResetPassword) -> ApiResult {
-  let _ = client
-    .reset_password(ResetPasswordRequest {
-      email: form.email.unwrap_or_default(),
-    })
+pub async fn reset_password(mut services: Services, form: FormResetPassword) -> ApiResult {
+  let _ = services
+    .user
+    .reset_password(ResetPasswordRequest { email: form.email })
     .await
     .map_err(|e| ApiError::from(e))?;
   Ok(reply::json(&()))

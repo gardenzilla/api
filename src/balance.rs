@@ -57,14 +57,14 @@ macro_rules! balanced_or_tree {
 
 #[cfg(debug_assertions)]
 macro_rules! debug_boxed {
-    ($x:expr) => {
-        ::warp::Filter::boxed($x)
-    };
+  ($x:expr) => {
+    ::warp::Filter::boxed($x)
+  };
 }
 
 #[cfg(not(debug_assertions))]
 macro_rules! debug_boxed {
-    ($x:expr) => {
-        $x
-    };
+  ($x:expr) => {
+    $x
+  };
 }
