@@ -1,11 +1,18 @@
-use warp::*;
+mod route_login;
+mod route_product;
+mod route_profile;
+mod route_sku;
+mod route_user;
 
-use crate::handler;
 use crate::login;
 use crate::prelude::*;
 use crate::{error::*, services::Services};
+use crate::{handler, services};
+use warp::*;
 
-fn auth() -> impl Filter<Extract = (u32,), Error = Rejection> + Copy {
+// Auth helper
+// authenticates request TOKEN
+pub fn auth() -> impl Filter<Extract = (u32,), Error = Rejection> + Copy {
   warp::header::optional::<String>("Token").and_then(|n: Option<String>| async move {
     if let Some(token) = n {
       Ok(login::verify_token(&token).map_err(|err| ApiError::from(err))?)
@@ -18,7 +25,7 @@ fn auth() -> impl Filter<Extract = (u32,), Error = Rejection> + Copy {
   })
 }
 
-fn add<T>(s: T) -> impl Filter<Extract = (T,), Error = std::convert::Infallible> + Clone
+pub fn add<T>(s: T) -> impl Filter<Extract = (T,), Error = std::convert::Infallible> + Clone
 where
   T: Clone + Send,
 {
@@ -27,172 +34,6 @@ where
 
 pub async fn get_all(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
   let welcome = warp::path::end().map(|| format!("Welcome to Gardenzilla API"));
-  /*
-   * Login routes
-   */
-  let login_action = warp::path::end()
-    .and(warp::post())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::login::login);
-
-  let login_password_reset = warp::path!("reset_password")
-    .and(warp::post())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::login::reset_password);
-
-  let login =
-    warp::path!("login" / ..).and(balanced_or_tree!(login_action.or(login_password_reset)));
-
-  let profile_new_password = warp::path!("new_password")
-    .and(warp::post())
-    .and(auth())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::user::new_password);
-
-  let profile_get = warp::path::end()
-    .and(warp::get())
-    .and(auth())
-    .and(add(services.clone()))
-    .and_then(handler::user::get_profile);
-
-  let profile_update = warp::path::end()
-    .and(warp::post())
-    .and(auth())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::user::update_profile);
-
-  let profile = warp::path!("profile" / ..).and(balanced_or_tree!(profile_new_password
-    .or(profile_get)
-    .or(profile_update)));
-
-  let user_get_all = warp::path!("all")
-    .and(warp::get())
-    .and(auth())
-    .and(add(services.clone()))
-    .and_then(handler::user::get_all);
-
-  let user_get_by_id = warp::path::param()
-    .and(warp::get())
-    .and(auth())
-    .and(add(services.clone()))
-    .and_then(handler::user::get_by_id);
-
-  let user_new = warp::path!("new")
-    .and(warp::post())
-    .and(auth())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::user::create_new);
-
-  let user = warp::path!("user" / ..).and(balanced_or_tree!(user_get_all
-    .or(user_get_by_id)
-    .or(user_new)));
-
-  let product_new = warp::path!("new")
-    .and(warp::post())
-    .and(auth())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::product::create_product);
-
-  let product_get_all = warp::path!("all")
-    .and(warp::get())
-    .and(auth())
-    .and(add(services.clone()))
-    .and_then(handler::product::get_product_all);
-
-  let product_get_by_id = warp::path::param()
-    .and(warp::get())
-    .and(auth())
-    .and(add(services.clone()))
-    .and_then(handler::product::get_product_by_id);
-
-  let product_get_bulk = warp::path!("bulk")
-    .and(warp::post())
-    .and(auth())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::product::get_product_bulk);
-
-  let product_update = warp::path::param()
-    .and(warp::put())
-    .and(auth())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::product::update_product);
-
-  let product_find = warp::path!("find")
-    .and(warp::post())
-    .and(auth())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::product::find_product);
-
-  let product = warp::path!("product" / ..).and(balanced_or_tree!(product_get_all
-    .or(product_new)
-    .or(product_get_by_id)
-    .or(product_get_bulk)
-    .or(product_update)
-    .or(product_find)));
-
-  let sku_new = warp::path!("new")
-    .and(warp::post())
-    .and(auth())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::product::create_sku);
-
-  let sku_get_all = warp::path!("all")
-    .and(warp::get())
-    .and(auth())
-    .and(add(services.clone()))
-    .and_then(handler::product::get_sku_all);
-
-  let sku_get_by_id = warp::path::param()
-    .and(warp::get())
-    .and(auth())
-    .and(add(services.clone()))
-    .and_then(handler::product::get_sku_by_id);
-
-  let sku_get_bulk = warp::path!("bulk")
-    .and(warp::post())
-    .and(auth())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::product::get_sku_bulk);
-
-  let sku_update = warp::path::param()
-    .and(warp::put())
-    .and(auth())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::product::update_sku);
-
-  let sku_find = warp::path!("find")
-    .and(warp::post())
-    .and(auth())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::product::find_sku);
-
-  let sku_set_divide = warp::path!("set_divide")
-    .and(warp::post())
-    .and(auth())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::product::sku_set_divide);
-
-  let sku = warp::path!("sku" / ..).and(balanced_or_tree!(sku_get_all
-    .or(sku_new)
-    .or(sku_get_by_id)
-    .or(sku_get_bulk)
-    .or(sku_update)
-    .or(sku_find)
-    .or(sku_set_divide)));
 
   // /**
   //  * Invoice routes
@@ -275,9 +116,12 @@ pub async fn get_all(services: Services) -> warp::filters::BoxedFilter<(impl Rep
   //   .or(customer_update),));
 
   // Compose routes
-  let routes = warp::any().and(balanced_or_tree!(
-    welcome, login, profile, user, product, sku
-  ));
+  let routes = warp::any().and(balanced_or_tree!(welcome
+    .or(route_login::routes(services.clone()))
+    .or(route_profile::routes(services.clone()))
+    .or(route_user::routes(services.clone()))
+    .or(route_product::routes(services.clone()))
+    .or(route_sku::routes(services.clone()))));
   // let routes = warp::any().and(balanced_or_tree!(
   //   welcome, login, profile, user, product, customer, invoice
   // ));
