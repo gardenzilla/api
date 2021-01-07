@@ -1,178 +1,141 @@
-use crate::prelude::*;
-use crate::UserId;
-use protos;
-use protos::customer::customer_client::CustomerClient;
-use protos::customer::*;
+use crate::{prelude::*, services::Services};
+use gzlib::proto::customer::*;
 use serde::{Deserialize, Serialize};
-use tonic::transport::Channel;
 use warp::reply;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Address {
-  zip: String,
-  location: String,
-  address: String,
+pub struct QueryForm {
+  query: String,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct Customer {
-  id: String,
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CustomerForm {
+  id: u32,
   name: String,
   email: String,
   phone: String,
   tax_number: String,
-  address: Address,
-  has_user: bool,
-  users: Vec<String>,
+  address_zip: String,
+  address_location: String,
+  address_street: String,
   date_created: String,
-  created_by: String,
+  created_by: u32,
 }
 
-impl From<&CustomerObj> for Customer {
-  fn from(c: &CustomerObj) -> Self {
-    let address = if let Some(addr) = &c.address {
-      Address {
-        zip: addr.zip.to_owned(),
-        location: addr.location.to_owned(),
-        address: addr.address.to_owned(),
-      }
-    } else {
-      Address {
-        zip: "".into(),
-        location: "".into(),
-        address: "".into(),
-      }
-    };
+impl From<CustomerObj> for CustomerForm {
+  fn from(c: CustomerObj) -> Self {
     Self {
-      id: c.id.to_owned(),
-      name: c.name.to_owned(),
-      email: c.email.to_owned(),
-      phone: c.phone.to_owned(),
-      tax_number: c.tax_number.to_owned(),
-      address: address,
-      has_user: c.has_user,
-      users: c.users.to_owned(),
-      date_created: c.date_created.to_owned(),
-      created_by: c.created_by.to_owned(),
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+      tax_number: c.tax_number,
+      address_zip: c.address_zip,
+      address_location: c.address_location,
+      address_street: c.address_street,
+      date_created: c.date_created,
+      created_by: c.created_by,
     }
   }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct CustomerNew {
+pub struct CustomerNewForm {
   name: String,
   email: String,
   phone: String,
   tax_number: String,
-  zip: String,
-  location: String,
-  address: String,
+  address_zip: String,
+  address_location: String,
+  address_street: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct CustomerUpdateForm {
-  name: String,
-  email: String,
-  phone: String,
-  tax_number: String,
-  zip: String,
-  location: String,
-  address: String,
-}
-
-impl CustomerNew {
-  fn to_request(self, created_by: UserId) -> CreateNewRequest {
-    CreateNewRequest {
-      name: self.name,
-      email: self.email,
-      phone: self.phone,
-      tax_number: self.tax_number,
-      zip: self.zip,
-      location: self.location,
-      address: self.address,
-      created_by: created_by.to_string(),
-    }
-  }
-}
-
-pub async fn create_new(
-  userid: UserId,
-  mut client: CustomerClient<Channel>,
-  customer_object: CustomerNew,
-) -> ApiResult {
-  let customer = client
-    .create_new(customer_object.to_request(userid))
-    .await
-    .map_err(|e| ApiError::from(e))?
-    .into_inner();
-  if let Some(customer) = customer.customer {
-    let _user: Customer = (&customer).into();
-    return Ok(reply::json(&_user));
-  }
-  Err(ApiError::not_found().into())
-}
-
-pub async fn get_all(_: UserId, mut client: CustomerClient<Channel>) -> ApiResult {
-  let all = client
-    .get_all(())
-    .await
-    .map_err(|e| ApiError::from(e))?
-    .into_inner();
-  let v = all
-    .customers
-    .iter()
-    .map(|u| u.into())
-    .collect::<Vec<Customer>>();
-  Ok(warp::reply::json(&v))
-}
-
-pub async fn get_by_id(
-  id: String,
-  _userid: UserId,
-  mut client: CustomerClient<Channel>,
-) -> ApiResult {
-  let customer = client
-    .get_by_id(GetByIdRequest { customer_id: id })
-    .await
-    .map_err(|e| ApiError::from(e))?
-    .into_inner();
-  if let Some(customer) = customer.customer {
-    let _user: Customer = (&customer).into();
-    return Ok(reply::json(&_user));
-  }
-  Err(ApiError::not_found().into())
-}
-
-pub async fn update(
-  customer_id: String,
-  _: UserId,
-  mut client: CustomerClient<Channel>,
-  customer_form: CustomerUpdateForm,
-) -> ApiResult {
-  let res = match client
-    .update_by_id(UpdateByIdRequest {
-      customer_id: customer_id.clone(),
-      customer: Some(CustomerUpdateObj {
-        id: customer_id,
-        name: customer_form.name,
-        email: customer_form.email,
-        phone: customer_form.phone,
-        tax_number: customer_form.tax_number,
-        address: Some(protos::customer::Address {
-          zip: customer_form.zip,
-          location: customer_form.location,
-          address: customer_form.address,
-        }),
-      }),
+pub async fn create_new(uid: u32, mut services: Services, co: CustomerNewForm) -> ApiResult {
+  let customer: CustomerForm = services
+    .customer
+    .create_new(NewCustomerObj {
+      name: co.name,
+      email: co.email,
+      phone: co.phone,
+      tax_number: co.tax_number,
+      address_zip: co.address_zip,
+      address_location: co.address_location,
+      address_street: co.address_street,
+      created_by: uid,
     })
     .await
     .map_err(|e| ApiError::from(e))?
     .into_inner()
+    .into();
+  Ok(reply::json(&customer))
+}
+
+pub async fn get_all(_: u32, mut services: Services) -> ApiResult {
+  let customer_ids: Vec<u32> = services
     .customer
-  {
-    Some(c) => c,
-    None => return Err(ApiError::internal_error("Not customer object in update response").into()),
-  };
-  let customer: Customer = (&res).into();
+    .get_all(())
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .customer_ids;
+  Ok(warp::reply::json(&customer_ids))
+}
+
+pub async fn get_by_id(customer_id: u32, _uid: u32, mut services: Services) -> ApiResult {
+  let customer: CustomerForm = services
+    .customer
+    .get_by_id(GetByIdRequest { customer_id })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
+  Ok(reply::json(&customer))
+}
+
+pub async fn get_bulk(_uid: u32, mut services: Services, customer_ids: Vec<u32>) -> ApiResult {
+  let mut all = services
+    .customer
+    .get_bulk(GetBulkRequest { customer_ids })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+
+  let mut result: Vec<CustomerForm> = Vec::new();
+  while let Some(customer) = all.message().await.map_err(|e| ApiError::from(e))? {
+    result.push(customer.into());
+  }
+  Ok(warp::reply::json(&result))
+}
+
+pub async fn update(_uid: u32, mut services: Services, cf: CustomerForm) -> ApiResult {
+  let customer: CustomerForm = services
+    .customer
+    .update_by_id(CustomerObj {
+      id: cf.id,
+      name: cf.name,
+      email: cf.email,
+      phone: cf.phone,
+      tax_number: cf.tax_number,
+      address_zip: cf.address_zip,
+      address_location: cf.address_location,
+      address_street: cf.address_street,
+      date_created: cf.date_created,
+      created_by: cf.created_by,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
   Ok(warp::reply::json(&customer))
+}
+
+pub async fn find(_uid: u32, mut services: Services, f: QueryForm) -> ApiResult {
+  let customer_ids: Vec<u32> = services
+    .customer
+    .find_customer(FindCustomerRequest { query: f.query })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .customer_ids;
+  Ok(reply::json(&customer_ids))
 }
