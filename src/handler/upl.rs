@@ -230,7 +230,7 @@ impl TryFrom<UplObj> for UplForm {
   }
 }
 
-pub async fn get_upl_by_id(upl_id: String, uid: u32, mut services: Services) -> ApiResult {
+pub async fn get_upl_by_id(upl_id: String, _uid: u32, mut services: Services) -> ApiResult {
   let upl: UplForm = services
     .upl
     .get_by_id(ByIdRequest { upl_id })
@@ -241,7 +241,7 @@ pub async fn get_upl_by_id(upl_id: String, uid: u32, mut services: Services) -> 
   Ok(reply::json(&upl))
 }
 
-pub async fn get_upl_bulk(uid: u32, mut services: Services, upl_ids: Vec<String>) -> ApiResult {
+pub async fn get_upl_bulk(_uid: u32, mut services: Services, upl_ids: Vec<String>) -> ApiResult {
   let mut all = services
     .upl
     .get_bulk(BulkRequest { upl_ids })
