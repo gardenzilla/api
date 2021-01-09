@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{prelude::*, services::Services};
 use gzlib::proto::pricing::{
   GetPriceBulkRequest, GetPriceRequest, PriceChangesRequest, PriceHistoryObject, PriceObject,
@@ -83,13 +85,11 @@ pub async fn create_new(uid: u32, mut services: Services, pf: PriceForm) -> ApiR
 }
 
 pub async fn get_by_id(sku: u32, _uid: u32, mut services: Services) -> ApiResult {
-  let price_form: PriceForm = services
-    .pricing
-    .get_price(GetPriceRequest { sku })
-    .await
-    .map_err(|e| ApiError::from(e))?
-    .into_inner()
-    .into();
+  let price_form: Option<PriceForm> =
+    match services.pricing.get_price(GetPriceRequest { sku }).await {
+      Ok(r) => Some(r.into_inner().into()),
+      Err(_) => None,
+    };
   Ok(reply::json(&price_form))
 }
 
@@ -105,7 +105,7 @@ pub async fn get_bulk(_uid: u32, mut services: Services, skus: Vec<u32>) -> ApiR
   while let Some(price) = all.message().await.map_err(|e| ApiError::from(e))? {
     result.push(price.into());
   }
-  Ok(warp::reply::json(&result))
+  Ok(reply::json(&result))
 }
 
 pub async fn get_price_history(sku: u32, _uid: u32, mut services: Services) -> ApiResult {

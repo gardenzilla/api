@@ -26,7 +26,7 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and(warp::body::json())
     .and_then(handler::pricing::get_bulk);
 
-  let get_price_history = warp::path!("history")
+  let get_price_history = warp::path!("history" / ..)
     .and(warp::path::param())
     .and(warp::get())
     .and(auth())
