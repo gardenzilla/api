@@ -53,7 +53,7 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and(warp::body::json())
     .and_then(handler::cash::get_by_date_range);
 
-  warp::path!("price" / ..)
+  warp::path!("cash" / ..)
     .and(balanced_or_tree!(new_purchase
       .or(new_general)
       .or(get_by_id)
