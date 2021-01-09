@@ -1,3 +1,4 @@
+pub mod cash;
 pub mod customer;
 pub mod login;
 pub mod pricing;
