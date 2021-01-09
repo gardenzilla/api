@@ -5,12 +5,12 @@ use crate::{
 };
 use warp::{Filter, Reply};
 
+// [POST] transaction/new_purchase
+// [POST] transaction/new_general
 // [GET ] transaction/<ID>
 // [GET ] transaction/balance
 // [POST] transaction/bulk
 // [POST] transaction/date_range
-// [POST] transaction/new_purchase
-// [POST] transaction/new_general
 
 pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
   let new_purchase = warp::path!("new_purchase")

@@ -49,7 +49,6 @@ impl TryFrom<TransactionObject> for TransactionForm {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewTransactionPurchaseForm {
-  transaction_id: String,
   cart_id: u32,
   amount: i32,
   reference: String,
@@ -58,7 +57,6 @@ pub struct NewTransactionPurchaseForm {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewTransactionGeneralForm {
-  transaction_id: String,
   amount: i32,
   reference: String,
   comment: String,
