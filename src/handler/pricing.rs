@@ -107,17 +107,23 @@ pub async fn get_bulk(_uid: u32, mut services: Services, skus: Vec<u32>) -> ApiR
 }
 
 pub async fn get_price_history(sku: u32, _uid: u32, mut services: Services) -> ApiResult {
-  let mut all = services
+  let mut result: Vec<PriceHistoryForm> = Vec::new();
+
+  let res = match services
     .pricing
     .get_price_history(GetPriceRequest { sku })
     .await
-    .map_err(|e| ApiError::from(e))?
-    .into_inner();
+  {
+    Ok(resp) => Some(resp.into_inner()),
+    Err(_) => None,
+  };
 
-  let mut result: Vec<PriceHistoryForm> = Vec::new();
-  while let Some(ph) = all.message().await.map_err(|e| ApiError::from(e))? {
-    result.push(ph.into());
+  if let Some(mut all) = res {
+    while let Some(ph) = all.message().await.map_err(|e| ApiError::from(e))? {
+      result.push(ph.into());
+    }
   }
+
   Ok(warp::reply::json(&result))
 }
 
