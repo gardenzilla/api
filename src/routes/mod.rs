@@ -5,6 +5,7 @@ mod route_pricing;
 mod route_product;
 mod route_profile;
 mod route_sku;
+mod route_source;
 mod route_stock;
 mod route_upl;
 mod route_user;
@@ -50,7 +51,8 @@ pub async fn get_all(services: Services) -> warp::filters::BoxedFilter<(impl Rep
     .or(route_customer::routes(services.clone()))
     .or(route_pricing::routes(services.clone()))
     .or(route_cash::routes(services.clone()))
-    .or(route_stock::routes(services.clone()))));
+    .or(route_stock::routes(services.clone()))
+    .or(route_source::routes(services.clone()))));
   // let routes = warp::any().and(balanced_or_tree!(
   //   welcome, login, profile, user, product, customer, invoice
   // ));
