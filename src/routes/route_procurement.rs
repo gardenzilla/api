@@ -87,6 +87,13 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and(warp::body::json())
     .and_then(handler::procurement::add_upl);
 
+  let update_upl = warp::path!("update_upl")
+    .and(warp::put())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::procurement::update_upl);
+
   let remove_upl = warp::path!("remove_upl")
     .and(warp::put())
     .and(auth())
@@ -135,6 +142,7 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
       .or(set_sku_piece)
       .or(set_sku_price)
       .or(add_upl)
+      .or(update_upl)
       .or(remove_upl)
       .or(set_status_ordered)
       .or(set_status_arrived)
