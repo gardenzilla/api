@@ -5,7 +5,7 @@ use gzlib::proto::{
   email::email_client::EmailClient, invoice::invoice_client::InvoiceClient,
   pricing::pricing_client::PricingClient, procurement::procurement_client::ProcurementClient,
   product::product_client::ProductClient, source::source_client::SourceClient,
-  upl::upl_client::UplClient, user::user_client::UserClient,
+  stock::stock_client::StockClient, upl::upl_client::UplClient, user::user_client::UserClient,
 };
 use tonic::transport::Channel;
 
@@ -33,6 +33,7 @@ pub struct Services {
   pub pricing: PricingClient<Channel>,
   pub auth: (),
   pub purchase: (),
+  pub stock: StockClient<Channel>,
 }
 
 impl Services {
@@ -71,6 +72,9 @@ impl Services {
         .expect("Could not connect to pricing service"),
       auth: (),
       purchase: (),
+      stock: StockClient::connect(service_address("SERVICE_ADDR_STOCK"))
+        .await
+        .expect("Could not connect to stock service"),
     }
   }
 }

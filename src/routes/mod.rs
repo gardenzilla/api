@@ -5,6 +5,7 @@ mod route_pricing;
 mod route_product;
 mod route_profile;
 mod route_sku;
+mod route_stock;
 mod route_upl;
 mod route_user;
 
@@ -38,86 +39,6 @@ where
 pub async fn get_all(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
   let welcome = warp::path::end().map(|| format!("Welcome to Gardenzilla API"));
 
-  // /**
-  //  * Invoice routes
-  //  */
-  // let invoice_new = warp::path!("new")
-  //   .and(warp::post())
-  //   .and(auth())
-  //   .and(with_db(client_invoice.clone()))
-  //   .and(warp::body::json())
-  //   .and_then(handler::invoice::new_invoice);
-
-  // let invoice = warp::path!("invoice" / ..).and(balanced_or_tree!(invoice_new));
-
-  // /*
-  //  * Product routes
-  //  */
-  // let product_get_all = warp::path!("all")
-  //   .and(warp::get())
-  //   .and(auth())
-  //   .and(with_db(client_product.clone()))
-  //   .and_then(handler::product::get_all);
-
-  // let product_get_by_id = warp::path::param()
-  //   .and(warp::get())
-  //   .and(auth())
-  //   .and(with_db(client_product.clone()))
-  //   .and_then(handler::product::get_by_id);
-
-  // let product_new = warp::path!("new")
-  //   .and(warp::post())
-  //   .and(auth())
-  //   .and(with_db(client_product.clone()))
-  //   .and(warp::body::json())
-  //   .and_then(handler::product::create_new);
-
-  // let product_update = warp::path::param()
-  //   .and(warp::put())
-  //   .and(auth())
-  //   .and(with_db(client_product.clone()))
-  //   .and(warp::body::json())
-  //   .and_then(handler::product::update);
-
-  // let product = warp::path!("product" / ..).and(balanced_or_tree!(product_get_all
-  //   .or(product_get_by_id)
-  //   .or(product_new)
-  //   .or(product_update),));
-
-  // /*
-  //  * Customer routes
-  //  */
-  // let customer_get_all = warp::path!("all")
-  //   .and(warp::get())
-  //   .and(auth())
-  //   .and(with_db(client_customer.clone()))
-  //   .and_then(handler::customer::get_all);
-
-  // let customer_get_by_id = warp::path::param()
-  //   .and(warp::get())
-  //   .and(auth())
-  //   .and(with_db(client_customer.clone()))
-  //   .and_then(handler::customer::get_by_id);
-
-  // let customer_new = warp::path!("new")
-  //   .and(warp::post())
-  //   .and(auth())
-  //   .and(with_db(client_customer.clone()))
-  //   .and(warp::body::json())
-  //   .and_then(handler::customer::create_new);
-
-  // let customer_update = warp::path::param()
-  //   .and(warp::put())
-  //   .and(auth())
-  //   .and(with_db(client_customer.clone()))
-  //   .and(warp::body::json())
-  //   .and_then(handler::customer::update);
-
-  // let customer = warp::path!("customer" / ..).and(balanced_or_tree!(customer_get_all
-  //   .or(customer_get_by_id)
-  //   .or(customer_new)
-  //   .or(customer_update),));
-
   // Compose routes
   let routes = warp::any().and(balanced_or_tree!(welcome
     .or(route_login::routes(services.clone()))
@@ -128,7 +49,8 @@ pub async fn get_all(services: Services) -> warp::filters::BoxedFilter<(impl Rep
     .or(route_upl::routes(services.clone()))
     .or(route_customer::routes(services.clone()))
     .or(route_pricing::routes(services.clone()))
-    .or(route_cash::routes(services.clone()))));
+    .or(route_cash::routes(services.clone()))
+    .or(route_stock::routes(services.clone()))));
   // let routes = warp::any().and(balanced_or_tree!(
   //   welcome, login, profile, user, product, customer, invoice
   // ));
