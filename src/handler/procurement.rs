@@ -1,9 +1,9 @@
 use crate::{prelude::*, services::Services};
 use gzlib::proto::procurement::{
-  set_status_request::Status, AddSkuRequest, AddUplRequest, CreateNewRequest, GetByIdRequest,
-  GetInfoBulkRequest, ProcurementInfoObject, ProcurementItem, ProcurementObject, RemoveRequest,
-  RemoveSkuRequest, RemoveUplRequest, SetDeliveryDateRequest, SetReferenceRequest,
-  SetSkuPieceRequest, SetSkuPriceRequest, SetStatusRequest, UpdateUplRequest, UplCandidate,
+  AddSkuRequest, AddUplRequest, CreateNewRequest, GetByIdRequest, GetInfoBulkRequest,
+  ProcurementInfoObject, ProcurementItem, ProcurementObject, RemoveRequest, RemoveSkuRequest,
+  RemoveUplRequest, SetDeliveryDateRequest, SetReferenceRequest, SetSkuPieceRequest,
+  SetSkuPriceRequest, SetStatusRequest, Status, UpdateUplRequest, UplCandidate,
 };
 use serde::{Deserialize, Serialize};
 use warp::reply;
@@ -33,6 +33,27 @@ pub struct NewProcurementForm {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub enum StatusForm {
+  New,
+  Ordered,
+  Arrived,
+  Processing,
+  Closed,
+}
+
+impl From<Status> for StatusForm {
+  fn from(s: Status) -> Self {
+    match s {
+      Status::New => StatusForm::New,
+      Status::Ordered => StatusForm::Ordered,
+      Status::Arrived => StatusForm::Arrived,
+      Status::Processing => StatusForm::Processing,
+      Status::Closed => StatusForm::Closed,
+    }
+  }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ProcurementForm {
   pub id: u32,
   pub source_id: u32,
@@ -40,6 +61,7 @@ pub struct ProcurementForm {
   pub estimated_delivery_date: String,
   pub items: Vec<ProcurementItemForm>,
   pub upls: Vec<UplCandidateForm>,
+  pub status: StatusForm,
   pub created_at: String,
   pub created_by: u32,
 }
@@ -64,8 +86,10 @@ pub struct ProcurementInfoForm {
   id: u32,
   source_id: u32,
   sku_count: u32,
+  sku_piece_count: u32,
   upl_count: u32,
   estimated_delivery_date: String,
+  status: StatusForm,
   created_at: String,
   created_by: u32,
 }
@@ -164,6 +188,9 @@ impl From<ProcurementObject> for ProcurementForm {
       estimated_delivery_date: p.estimated_delivery_date,
       items: p.items.into_iter().map(|i| i.into()).collect(),
       upls: p.upls.into_iter().map(|u| u.into()).collect(),
+      status: Status::from_i32(p.status)
+        .expect("Error while getting Status from i32")
+        .into(),
       created_at: p.created_at,
       created_by: p.created_by,
     }
@@ -176,8 +203,12 @@ impl From<ProcurementInfoObject> for ProcurementInfoForm {
       id: pi.id,
       source_id: pi.source_id,
       sku_count: pi.sku_count,
+      sku_piece_count: pi.sku_piece_count,
       upl_count: pi.upl_count,
       estimated_delivery_date: pi.estimated_delivery_date,
+      status: Status::from_i32(pi.status)
+        .expect("Error while getting Status from i32")
+        .into(),
       created_at: pi.created_at,
       created_by: pi.created_by,
     }
