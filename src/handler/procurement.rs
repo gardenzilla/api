@@ -1,11 +1,21 @@
-use crate::{prelude::*, services::Services};
-use gzlib::proto::procurement::{
-  AddSkuRequest, AddUplRequest, CreateNewRequest, GetByIdRequest, GetInfoBulkRequest,
-  ProcurementInfoObject, ProcurementItem, ProcurementObject, RemoveRequest, RemoveSkuRequest,
-  RemoveUplRequest, SetDeliveryDateRequest, SetReferenceRequest, SetSkuPieceRequest,
-  SetSkuPriceRequest, SetStatusRequest, Status, UpdateUplRequest, UplCandidate,
+use crate::{
+  prelude::*,
+  services::{self, Services},
+};
+use futures_util::stream;
+use gzlib::proto::{
+  email::EmailRequest,
+  procurement::{
+    AddSkuRequest, AddUplRequest, CreateNewRequest, GetByIdRequest, GetInfoBulkRequest,
+    ProcurementInfoObject, ProcurementItem, ProcurementObject, RemoveRequest, RemoveSkuRequest,
+    RemoveUplRequest, SetDeliveryDateRequest, SetReferenceRequest, SetSkuPieceRequest,
+    SetSkuPriceRequest, SetStatusRequest, Status, UpdateUplRequest, UplCandidate,
+  },
+  product::{GetSkuBulkRequest, SkuObj},
+  upl::UplNew,
 };
 use serde::{Deserialize, Serialize};
+use tonic::Request;
 use warp::reply;
 
 // [GET   ] /procurement/<ID>
@@ -477,7 +487,128 @@ pub async fn set_status_processing(
   Ok(reply::json(&res))
 }
 
+// 1. Try to get ProcurementObject
+// 2. Check status
+// 3. Try to create UPLs
+// 4. Set status to closed
 pub async fn set_status_closed(procurement_id: u32, uid: u32, mut services: Services) -> ApiResult {
+  // 1. Try to get ProcurementObject
+  let procurement_object: ProcurementForm = services
+    .procurement
+    .get_by_id(GetByIdRequest { procurement_id })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
+
+  // 2. Check if status is Processing
+  match procurement_object.status {
+    StatusForm::Processing => (),
+    // If not, return error
+    _ => {
+      return Err(
+        ApiError::bad_request("A beszerzés nem zárható le! A státusz nem 'Feldolgozás alatt'")
+          .into(),
+      )
+    }
+  }
+
+  // Collect SKU IDs
+  let sku_id = procurement_object
+    .items
+    .iter()
+    .map(|i| i.sku)
+    .collect::<Vec<u32>>();
+
+  // Load SKU objects to access SKU and product data
+  let mut all_skus = services
+    .product
+    .get_sku_bulk(GetSkuBulkRequest { sku_id })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+
+  let mut sku_objects: Vec<SkuObj> = Vec::new();
+
+  while let Some(sku_obj) = all_skus.message().await.map_err(|e| ApiError::from(e))? {
+    sku_objects.push(sku_obj);
+  }
+
+  let mut result_upl_candidates: Vec<UplNew> = Vec::new();
+
+  for sku_item in procurement_object.items.iter() {
+    // Try find related SKU object
+    let related_sku_object =
+      sku_objects
+        .iter()
+        .find(|so| so.sku == sku_item.sku)
+        .ok_or(ApiError::bad_request(
+          "A beszerzés nem létező SKUt tartalmaz!",
+        ))?;
+
+    // Collect UPLs related to this SKU item
+    let mut u_candidates = procurement_object
+      .upls
+      .iter()
+      .filter(|upl_candidate| upl_candidate.sku == sku_item.sku)
+      .map(|uc| UplNew {
+        upl_id: uc.upl_id.clone(),
+        product_id: related_sku_object.product_id,
+        sku: uc.sku,
+        upl_piece: uc.upl_piece,
+        best_before: uc.best_before.clone(),
+        stock_id: 1, // todo: refact this value to grab from ENV variable
+        procurement_id: procurement_object.id,
+        procurement_net_price: sku_item.expected_net_price,
+        divisible_amount: 0, // todo: refact and remove this field from UPL. And check can divide using SKU call
+        created_by: uid,
+      })
+      .collect::<Vec<UplNew>>();
+
+    // Check if all UPL count is the required one
+    if u_candidates.len() != sku_item.ordered_amount as usize {
+      return Err(
+        ApiError::bad_request(&format!(
+          "A beszerzés nem zárható le! Az alábbi SKU nem rendelkezik minden UPL-el: {}",
+          &related_sku_object.display_name
+        ))
+        .into(),
+      );
+    }
+
+    // Add SKU related upl candidates into the result upl candidates
+    result_upl_candidates.append(&mut u_candidates);
+  }
+
+  // All UPL are fine, create request stream
+  let request = Request::new(stream::iter(result_upl_candidates));
+
+  // 4. Create UPLs
+  let created_upl_ids = services
+    .upl
+    .create_new_bulk(request)
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .upl_ids;
+
+  // Send email to sysadmin if not all UPLs are created!
+  services
+    .email
+    .send_email(EmailRequest {
+      to: "peter.mezei@gardenova.hu".to_string(),
+      subject: "Proc hiba! Nem minden UPL jött létre!".to_string(),
+      body: format!(
+        "UPL létrehozás hiba! Nem minden UPL jött létre! Proc id: {}! {} helyett {}!",
+        procurement_object.id,
+        procurement_object.upls.len(),
+        created_upl_ids.len()
+      ),
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?;
+
+  // Set procurement status to closed
   let res: ProcurementForm = services
     .procurement
     .set_status(SetStatusRequest {
@@ -489,5 +620,7 @@ pub async fn set_status_closed(procurement_id: u32, uid: u32, mut services: Serv
     .map_err(|e| ApiError::from(e))?
     .into_inner()
     .into();
+
+  // Reply updated procurement object
   Ok(reply::json(&res))
 }
