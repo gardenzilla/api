@@ -1,8 +1,10 @@
 use crate::{prelude::*, services::Services};
 use gzlib::proto::product::{
-  FindProductRequest, FindSkuRequest, GetProductBulkRequest, GetProductRequest, GetSkuBulkRequest,
-  GetSkuRequest, NewProduct, NewSku, ProductObj, SkuObj, UpdateSkuDivideRequest,
+  self, FindProductRequest, FindSkuRequest, GetProductBulkRequest, GetProductRequest,
+  GetSkuBulkRequest, GetSkuRequest, NewProduct, NewSku, ProductObj, SkuObj,
+  UpdateProductDiscontinuedRequest, UpdateSkuDiscontinuedRequest, UpdateSkuDivideRequest,
 };
+use product::UpdateProductPerishableRequest;
 use serde::{Deserialize, Serialize};
 use warp::reply;
 
@@ -27,6 +29,8 @@ pub struct ProductForm {
   pub description: String,
   pub unit: String,
   pub skus: Vec<u32>,
+  pub discontinued: bool,
+  pub perishable: bool,
   pub created_at: String,
   pub created_by: u32,
 }
@@ -39,8 +43,11 @@ pub struct SkuForm {
   pub display_name: String,
   pub display_packaging: String,
   pub quantity: String,
+  pub divisible_amount: u32,
   pub unit: String,
   pub can_divide: bool,
+  pub discontinued: bool,
+  pub perishable: bool,
   pub created_at: String,
   pub created_by: u32,
 }
@@ -54,6 +61,24 @@ pub struct FindForm {
 pub struct SkuSetDivideForm {
   pub sku: u32,
   pub can_divide: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SkuSetDiscontinuedForm {
+  pub sku: u32,
+  pub discontinued: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProductSetPerishableForm {
+  pub product_id: u32,
+  pub perishable: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProductSetDiscontinuedForm {
+  pub product_id: u32,
+  pub discontinued: bool,
 }
 
 impl From<NewProduct> for NewProductForm {
@@ -74,6 +99,8 @@ impl From<ProductObj> for ProductForm {
       description: p.description,
       unit: p.unit,
       skus: p.skus,
+      discontinued: p.discontinued,
+      perishable: p.perishable,
       created_at: p.created_at,
       created_by: p.created_by,
     }
@@ -89,8 +116,11 @@ impl From<SkuObj> for SkuForm {
       display_name: s.display_name,
       display_packaging: s.display_packaging,
       quantity: s.quantity,
+      divisible_amount: s.divisible_amount,
       unit: s.unit,
       can_divide: s.can_divide,
+      discontinued: s.discontinued,
+      perishable: s.perishable,
       created_at: s.created_at,
       created_by: s.created_by,
     }
@@ -163,6 +193,8 @@ pub async fn update_product(
       description: p.description,
       unit: p.unit,
       skus: p.skus,
+      discontinued: p.discontinued,
+      perishable: p.perishable,
       created_by: p.created_by,
       created_at: p.created_at,
     })
@@ -182,6 +214,42 @@ pub async fn find_product(_uid: u32, mut services: Services, f: FindForm) -> Api
     .into_inner()
     .sku_ids;
   Ok(reply::json(&product))
+}
+
+pub async fn product_set_discontinued(
+  _uid: u32,
+  mut services: Services,
+  f: ProductSetDiscontinuedForm,
+) -> ApiResult {
+  let sku: ProductForm = services
+    .product
+    .update_product_discontinued(UpdateProductDiscontinuedRequest {
+      product_id: f.product_id,
+      discontinued: f.discontinued,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
+  Ok(reply::json(&sku))
+}
+
+pub async fn product_set_perishable(
+  _uid: u32,
+  mut services: Services,
+  f: ProductSetPerishableForm,
+) -> ApiResult {
+  let sku: ProductForm = services
+    .product
+    .update_product_perishable(UpdateProductPerishableRequest {
+      product_id: f.product_id,
+      perishable: f.perishable,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
+  Ok(reply::json(&sku))
 }
 
 pub async fn create_sku(uid: u32, mut services: Services, ns: NewSkuForm) -> ApiResult {
@@ -246,8 +314,11 @@ pub async fn update_sku(sku: u32, _uid: u32, mut services: Services, s: SkuForm)
       display_name: s.display_name,
       display_packaging: s.display_packaging,
       quantity: s.quantity,
+      divisible_amount: s.divisible_amount,
       unit: s.unit,
       can_divide: s.can_divide,
+      discontinued: s.discontinued,
+      perishable: s.perishable,
       created_by: s.created_by,
       created_at: s.created_at,
     })
@@ -275,6 +346,24 @@ pub async fn sku_set_divide(_uid: u32, mut services: Services, f: SkuSetDivideFo
     .update_sku_divide(UpdateSkuDivideRequest {
       sku: f.sku,
       can_divide: f.can_divide,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
+  Ok(reply::json(&sku))
+}
+
+pub async fn sku_set_discontinued(
+  _uid: u32,
+  mut services: Services,
+  f: SkuSetDiscontinuedForm,
+) -> ApiResult {
+  let sku: SkuForm = services
+    .product
+    .update_sku_discontinued(UpdateSkuDiscontinuedRequest {
+      sku: f.sku,
+      discontinued: f.discontinued,
     })
     .await
     .map_err(|e| ApiError::from(e))?

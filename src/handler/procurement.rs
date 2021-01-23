@@ -5,6 +5,7 @@ use crate::{
 use futures_util::stream;
 use gzlib::proto::{
   email::EmailRequest,
+  pricing::{GetPriceBulkRequest, PriceObject},
   procurement::{
     AddSkuRequest, AddUplRequest, CreateNewRequest, GetByIdRequest, GetInfoBulkRequest,
     ProcurementInfoObject, ProcurementItem, ProcurementObject, RemoveRequest, RemoveSkuRequest,
@@ -88,6 +89,7 @@ pub struct UplCandidateForm {
   upl_id: String,
   sku: u32,
   upl_piece: u32,
+  opened_sku: bool,
   best_before: String,
 }
 
@@ -184,6 +186,7 @@ impl From<UplCandidate> for UplCandidateForm {
       upl_id: u.upl_id,
       sku: u.sku,
       upl_piece: u.upl_piece,
+      opened_sku: u.opened_sku,
       best_before: u.best_before,
     }
   }
@@ -389,6 +392,7 @@ pub async fn add_upl(_uid: u32, mut services: Services, f: AddUplForm) -> ApiRes
         upl_id: f.upl_candidate.upl_id,
         sku: f.upl_candidate.sku,
         upl_piece: f.upl_candidate.upl_piece,
+        opened_sku: f.upl_candidate.opened_sku,
         best_before: f.upl_candidate.best_before,
       }),
     })
@@ -523,7 +527,9 @@ pub async fn set_status_closed(procurement_id: u32, uid: u32, mut services: Serv
   // Load SKU objects to access SKU and product data
   let mut all_skus = services
     .product
-    .get_sku_bulk(GetSkuBulkRequest { sku_id })
+    .get_sku_bulk(GetSkuBulkRequest {
+      sku_id: sku_id.clone(),
+    })
     .await
     .map_err(|e| ApiError::from(e))?
     .into_inner();
@@ -534,6 +540,21 @@ pub async fn set_status_closed(procurement_id: u32, uid: u32, mut services: Serv
     sku_objects.push(sku_obj);
   }
 
+  // Load PriceObjects to access SKU price data
+  let mut all_prices = services
+    .pricing
+    .get_price_bulk(GetPriceBulkRequest { skus: sku_id })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+
+  let mut price_objects: Vec<PriceObject> = Vec::new();
+
+  while let Some(price_obj) = all_prices.message().await.map_err(|e| ApiError::from(e))? {
+    price_objects.push(price_obj);
+  }
+
+  // Create empty result vector
   let mut result_upl_candidates: Vec<UplNew> = Vec::new();
 
   for sku_item in procurement_object.items.iter() {
@@ -545,6 +566,15 @@ pub async fn set_status_closed(procurement_id: u32, uid: u32, mut services: Serv
         .ok_or(ApiError::bad_request(
           "A beszerzés nem létező SKUt tartalmaz!",
         ))?;
+
+    // Try find related Price object
+    let _ = price_objects
+      .iter()
+      .find(|po| po.sku == sku_item.sku)
+      .ok_or(ApiError::bad_request(&format!(
+        "A beszerzés alábbi SKUja nem rendelkezik eladási árral: #{}, {}",
+        sku_item.sku, related_sku_object.display_name
+      )))?;
 
     // Collect UPLs related to this SKU item
     let mut u_candidates = procurement_object
@@ -560,7 +590,8 @@ pub async fn set_status_closed(procurement_id: u32, uid: u32, mut services: Serv
         stock_id: 1, // todo: refact this value to grab from ENV variable
         procurement_id: procurement_object.id,
         procurement_net_price: sku_item.expected_net_price,
-        divisible_amount: 0, // todo: refact and remove this field from UPL. And check can divide using SKU call
+        divisible_amount: 0,
+        is_opened: uc.opened_sku,
         created_by: uid,
       })
       .collect::<Vec<UplNew>>();
@@ -593,20 +624,22 @@ pub async fn set_status_closed(procurement_id: u32, uid: u32, mut services: Serv
     .upl_ids;
 
   // Send email to sysadmin if not all UPLs are created!
-  services
-    .email
-    .send_email(EmailRequest {
-      to: "peter.mezei@gardenova.hu".to_string(),
-      subject: "Proc hiba! Nem minden UPL jött létre!".to_string(),
-      body: format!(
-        "UPL létrehozás hiba! Nem minden UPL jött létre! Proc id: {}! {} helyett {}!",
-        procurement_object.id,
-        procurement_object.upls.len(),
-        created_upl_ids.len()
-      ),
-    })
-    .await
-    .map_err(|e| ApiError::from(e))?;
+  if procurement_object.upls.len() != created_upl_ids.len() {
+    services
+      .email
+      .send_email(EmailRequest {
+        to: "peter.mezei@gardenova.hu".to_string(),
+        subject: "Proc hiba! Nem minden UPL jött létre!".to_string(),
+        body: format!(
+          "UPL létrehozás hiba! Nem minden UPL jött létre! Proc id: {}! {} helyett {}!",
+          procurement_object.id,
+          procurement_object.upls.len(),
+          created_upl_ids.len()
+        ),
+      })
+      .await
+      .map_err(|e| ApiError::from(e))?;
+  }
 
   // Set procurement status to closed
   let res: ProcurementForm = services

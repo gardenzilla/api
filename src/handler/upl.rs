@@ -127,7 +127,7 @@ pub struct UplForm {
   upl_piece: u32,
   is_healthy: bool,
   best_before: String,
-  depreciation: Depreciation,
+  depreciation: Option<Depreciation>,
   procurement_id: u32,
   procurement_net_price: u32,
   is_divisible: bool,
@@ -206,10 +206,10 @@ impl TryFrom<UplObj> for UplForm {
       upl_piece: upl.upl_piece,
       is_healthy: upl.is_healty,
       best_before: upl.best_before,
-      depreciation: upl
-        .depreciation
-        .ok_or(ApiError::internal_error("Missing DEPRECIATION"))?
-        .into(),
+      depreciation: match upl.depreciation {
+        Some(dp) => Some(dp.into()),
+        None => None,
+      },
       procurement_id: upl.procurement_id,
       procurement_net_price: upl.procurement_net_price,
       is_divisible: upl.is_divisible,

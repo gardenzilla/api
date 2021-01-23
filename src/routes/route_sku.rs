@@ -53,6 +53,13 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and(warp::body::json())
     .and_then(handler::product::sku_set_divide);
 
+  let sku_set_discontinued = warp::path!("set_discontinued")
+    .and(warp::put())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::product::sku_set_discontinued);
+
   warp::path!("sku" / ..)
     .and(balanced_or_tree!(sku_get_all
       .or(sku_new)
@@ -60,6 +67,7 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
       .or(sku_get_bulk)
       .or(sku_update)
       .or(sku_find)
-      .or(sku_set_divide)))
+      .or(sku_set_divide)
+      .or(sku_set_discontinued)))
     .boxed()
 }
