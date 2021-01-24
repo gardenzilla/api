@@ -22,19 +22,6 @@ use warp::reply;
 // PUT upl/remove_depreciation_price
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct NewUplForm {
-  upl_id: String,
-  product_id: u32,
-  sku: u32,
-  upl_piece: u32,
-  best_before: String,
-  stock_id: u32,
-  procurement_id: u32,
-  procurement_net_price: u32,
-  divisible_amount: u32,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateBestBeforeForm {
   upl_id: String,
   best_before: String,
