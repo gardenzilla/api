@@ -596,8 +596,31 @@ pub async fn set_status_closed(procurement_id: u32, uid: u32, mut services: Serv
       })
       .collect::<Vec<UplNew>>();
 
+    // Check best_before if SKU is perishable
+    if related_sku_object.perishable {
+      match u_candidates.iter().all(|uc| uc.best_before.len() > 0) {
+        true => (),
+        false => {
+          return Err(
+            ApiError::bad_request(&format!(
+              "Az alábbi SKU romlandó, viszont nem minden UPL-hez van lejárat rögzítve: {}",
+              &related_sku_object.display_name
+            ))
+            .into(),
+          )
+        }
+      }
+    }
+
     // Check if all UPL count is the required one
-    if u_candidates.len() != sku_item.ordered_amount as usize {
+    if u_candidates.iter().fold(0, |acc, uc| {
+      acc
+        + match uc.is_opened {
+          true => 1,
+          false => uc.upl_piece,
+        }
+    }) != sku_item.ordered_amount
+    {
       return Err(
         ApiError::bad_request(&format!(
           "A beszerzés nem zárható le! Az alábbi SKU nem rendelkezik minden UPL-el: {}",
