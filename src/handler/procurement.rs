@@ -1,7 +1,4 @@
-use crate::{
-  prelude::*,
-  services::{self, Services},
-};
+use crate::{prelude::*, services::Services};
 use futures_util::stream;
 use gzlib::proto::{
   email::EmailRequest,
