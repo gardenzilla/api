@@ -15,9 +15,17 @@ pub struct DateRangeForm {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub enum TrKind {
+  Cash,
+  Card,
+  Transfer,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TransactionForm {
   transaction_id: String,
   cart_id: Option<u32>,
+  kind: TrKind,
   amount: i32,
   reference: String,
   comment: String,
@@ -29,6 +37,10 @@ impl TryFrom<TransactionObject> for TransactionForm {
   type Error = ApiError;
 
   fn try_from(to: TransactionObject) -> Result<Self, Self::Error> {
+    let k: gzlib::proto::cash::TransactionKind =
+      gzlib::proto::cash::TransactionKind::from_i32(to.kind)
+        .ok_or(ApiError::internal_error("Tranazikcó belső kódolási hiba"))?;
+
     let res = Self {
       transaction_id: to.transaction_id,
       cart_id: match to.cart_id.ok_or(ApiError::internal_error(
@@ -36,6 +48,11 @@ impl TryFrom<TransactionObject> for TransactionForm {
       ))? {
         gzlib::proto::cash::transaction_object::CartId::Cart(cid) => Some(cid),
         gzlib::proto::cash::transaction_object::CartId::None(_) => None,
+      },
+      kind: match k {
+        gzlib::proto::cash::TransactionKind::KindCash => TrKind::Cash,
+        gzlib::proto::cash::TransactionKind::KindCard => TrKind::Card,
+        gzlib::proto::cash::TransactionKind::KindTransfer => TrKind::Transfer,
       },
       amount: to.amount,
       reference: to.reference,
@@ -50,6 +67,7 @@ impl TryFrom<TransactionObject> for TransactionForm {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewTransactionPurchaseForm {
   cart_id: u32,
+  kind: String,
   amount: i32,
   reference: String,
   comment: String,
@@ -57,6 +75,7 @@ pub struct NewTransactionPurchaseForm {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewTransactionGeneralForm {
+  kind: String,
   amount: i32,
   reference: String,
   comment: String,
@@ -70,6 +89,14 @@ pub async fn new_transaction_purchase(
   let transaction: TransactionForm = services
     .cash
     .create_transaction(NewTransaction {
+      kind: match nt.kind.as_str() {
+        "Cash" | "cash" => gzlib::proto::cash::TransactionKind::KindCash,
+        "Card" | "card" => gzlib::proto::cash::TransactionKind::KindCard,
+        "Transfer" | "transfer" => gzlib::proto::cash::TransactionKind::KindTransfer,
+        _ => {
+          return Err(ApiError::bad_request("A megadott tranzakció típus nem megfelelő!").into())
+        }
+      } as i32,
       amount: nt.amount,
       reference: nt.reference,
       comment: nt.comment,
@@ -91,6 +118,14 @@ pub async fn new_transaction_general(
   let transaction: TransactionForm = services
     .cash
     .create_transaction(NewTransaction {
+      kind: match nt.kind.as_str() {
+        "Cash" | "cash" => gzlib::proto::cash::TransactionKind::KindCash,
+        "Card" | "card" => gzlib::proto::cash::TransactionKind::KindCard,
+        "Transfer" | "transfer" => gzlib::proto::cash::TransactionKind::KindTransfer,
+        _ => {
+          return Err(ApiError::bad_request("A megadott tranzakció típus nem megfelelő!").into())
+        }
+      } as i32,
       amount: nt.amount,
       reference: nt.reference,
       comment: nt.comment,
