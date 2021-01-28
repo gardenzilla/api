@@ -6,68 +6,116 @@ use crate::{
 use warp::{Filter, Reply};
 
 pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
-  let sku_new = warp::path!("new")
+  let new = warp::path!("new")
     .and(warp::post())
     .and(auth())
     .and(add(services.clone()))
     .and(warp::body::json())
-    .and_then(handler::product::create_sku);
+    .and_then(handler::cart::new_cart);
 
-  let sku_get_all = warp::path!("all")
+  let get_all = warp::path!("all")
     .and(warp::get())
     .and(auth())
     .and(add(services.clone()))
-    .and_then(handler::product::get_sku_all);
+    .and_then(handler::cart::cart_get_all);
 
-  let sku_get_by_id = warp::path::param()
+  let get_by_id = warp::path::param()
     .and(warp::get())
     .and(auth())
     .and(add(services.clone()))
-    .and_then(handler::product::get_sku_by_id);
+    .and_then(handler::cart::cart_get_by_id);
 
-  let sku_get_bulk = warp::path!("bulk")
+  let get_bulk = warp::path!("bulk")
     .and(warp::post())
     .and(auth())
     .and(add(services.clone()))
     .and(warp::body::json())
-    .and_then(handler::product::get_sku_bulk);
+    .and_then(handler::cart::get_bulk);
 
-  let sku_update = warp::path::param()
+  let add_customer = warp::path!("add_customer")
     .and(warp::put())
     .and(auth())
     .and(add(services.clone()))
     .and(warp::body::json())
-    .and_then(handler::product::update_sku);
+    .and_then(handler::cart::cart_add_customer);
 
-  let sku_find = warp::path!("find")
-    .and(warp::post())
-    .and(auth())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::product::find_sku);
-
-  let sku_set_divide = warp::path!("set_divide")
-    .and(warp::post())
-    .and(auth())
-    .and(add(services.clone()))
-    .and(warp::body::json())
-    .and_then(handler::product::sku_set_divide);
-
-  let sku_set_discontinued = warp::path!("set_discontinued")
+  let remove_customer = warp::path!("remove_customer")
     .and(warp::put())
     .and(auth())
     .and(add(services.clone()))
     .and(warp::body::json())
-    .and_then(handler::product::sku_set_discontinued);
+    .and_then(handler::cart::cart_remove_customer);
 
-  warp::path!("sku" / ..)
-    .and(balanced_or_tree!(sku_get_all
-      .or(sku_new)
-      .or(sku_get_by_id)
-      .or(sku_get_bulk)
-      .or(sku_update)
-      .or(sku_find)
-      .or(sku_set_divide)
-      .or(sku_set_discontinued)))
+  let add_sku = warp::path!("add_sku")
+    .and(warp::put())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::cart::cart_add_sku);
+
+  let set_sku_piece = warp::path!("set_sku_piece")
+    .and(warp::put())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::cart::cart_set_sku_piece);
+
+  let remove_sku = warp::path!("remove_sku")
+    .and(warp::put())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::cart::cart_remove_sku);
+
+  let add_upl = warp::path!("add_upl")
+    .and(warp::put())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::cart::cart_add_upl);
+
+  let remove_upl = warp::path!("remove_upl")
+    .and(warp::put())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::cart::cart_remove_upl);
+
+  let set_payment = warp::path!("set_payment")
+    .and(warp::put())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::cart::cart_set_payment);
+
+  let add_payment = warp::path!("add_payment")
+    .and(warp::put())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::cart::cart_add_payment);
+
+  let close = warp::path!("close")
+    .and(warp::put())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::cart::cart_close);
+
+  warp::path!("cart" / ..)
+    .and(balanced_or_tree!(get_all
+      .or(new)
+      .or(get_by_id)
+      .or(get_bulk)
+      .or(add_customer)
+      .or(remove_customer)
+      .or(add_sku)
+      .or(remove_sku)
+      .or(set_sku_piece)
+      .or(add_upl)
+      .or(remove_upl)
+      .or(set_payment)
+      .or(add_payment)
+      .or(close)))
     .boxed()
 }

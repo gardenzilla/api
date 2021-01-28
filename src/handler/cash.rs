@@ -24,7 +24,7 @@ pub enum TrKind {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransactionForm {
   transaction_id: String,
-  cart_id: Option<u32>,
+  cart_id: Option<String>,
   kind: TrKind,
   amount: i32,
   reference: String,
@@ -66,7 +66,7 @@ impl TryFrom<TransactionObject> for TransactionForm {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewTransactionPurchaseForm {
-  cart_id: u32,
+  cart_id: String,
   kind: String,
   amount: i32,
   reference: String,

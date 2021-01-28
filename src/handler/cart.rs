@@ -9,6 +9,7 @@ use crate::{
 };
 use gzlib::proto::{
   self,
+  cash::NewTransaction,
   product::SkuObj,
   purchase::{upl_info_object::UplKindOpenedSku, CartInfoObject, CartObject},
 };
@@ -332,7 +333,7 @@ enum UKind {
 pub struct CartAddPaymentForm {
   cart_id: String,
   kind: String,
-  amount: u32,
+  amount: i32,
 }
 
 pub async fn new_cart(uid: u32, mut services: Services, f: NewCartForm) -> ApiResult {
@@ -894,4 +895,95 @@ pub async fn cart_set_payment(
     .try_into()?;
 
   Ok(reply::json(&res))
+}
+
+pub async fn cart_add_payment(
+  uid: u32,
+  mut services: Services,
+  f: CartAddPaymentForm,
+) -> ApiResult {
+  // Check if cart valid
+  let cart: CartForm = services
+    .purchase
+    .cart_get_by_id(proto::purchase::CartByIdRequest {
+      cart_id: f.cart_id.clone(),
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+
+  // Do payment
+  let transaction = services
+    .cash
+    .create_transaction(NewTransaction {
+      kind: match f.kind.as_str() {
+        "Cash" | "cash" => gzlib::proto::cash::TransactionKind::KindCash,
+        "Card" | "card" => gzlib::proto::cash::TransactionKind::KindCard,
+        "Transfer" | "transfer" => gzlib::proto::cash::TransactionKind::KindTransfer,
+        _ => {
+          return Err(ApiError::bad_request("A megadott tranzakció típus nem megfelelő!").into())
+        }
+      } as i32,
+      amount: f.amount,
+      reference: "".to_string(),
+      comment: "".to_string(),
+      created_by: uid,
+      cart_id: Some(proto::cash::new_transaction::CartId::Cart(
+        f.cart_id.clone(),
+      )),
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+
+  let res: CartForm = services
+    .purchase
+    .cart_add_payment(proto::purchase::CartAddPaymentRequest {
+      cart_id: f.cart_id,
+      payment_id: transaction.transaction_id,
+      amount: transaction.amount,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+
+  Ok(reply::json(&res))
+}
+
+pub async fn cart_close(uid: u32, mut services: Services, f: CartCloseForm) -> ApiResult {
+  // Check if cart valid
+  let cart: CartForm = services
+    .purchase
+    .cart_get_by_id(proto::purchase::CartByIdRequest {
+      cart_id: f.cart_id.clone(),
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+
+  let cart_closed: CartForm = services
+    .purchase
+    .cart_close(proto::purchase::CartCloseRequest {
+      cart_id: f.cart_id.clone(),
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+
+  // Move all locked UPLs into its cart
+  services
+    .upl
+    .close_cart(proto::upl::CloseCartRequest {
+      cart_id: f.cart_id,
+      created_by: uid,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?;
+
+  // Return nothing if success
+  Ok(reply::json(&""))
 }
