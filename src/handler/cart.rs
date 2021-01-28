@@ -88,7 +88,7 @@ pub enum ItemKindForm {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ItemForm {
-  kind: ItemKindForm,
+  sku: u32,
   name: String,
   piece: u32,
   retail_price_net: u32,
@@ -186,27 +186,15 @@ impl TryFrom<CartObject> for CartForm {
       shopping_list: f
         .shopping_list
         .iter()
-        .map(|i| {
-          let kind: proto::purchase::cart_object::ItemKind =
-            proto::purchase::cart_object::ItemKind::from_i32(i.kind).unwrap();
-          ItemForm {
-            kind: match kind {
-              proto::purchase::cart_object::ItemKind::Sku => ItemKindForm::Sku,
-              proto::purchase::cart_object::ItemKind::DerivedProduct => {
-                ItemKindForm::DerivedProduct
-              }
-              proto::purchase::cart_object::ItemKind::DepreciatedSku => {
-                ItemKindForm::DepreciatedProduct
-              }
-            },
-            name: i.name.clone(),
-            piece: i.piece,
-            retail_price_net: i.retail_price_net,
-            vat: i.vat.clone(),
-            retail_price_gross: i.retail_price_gross,
-            total_retail_price_net: i.total_retail_price_net,
-            total_retail_price_gross: i.total_retail_price_gross,
-          }
+        .map(|i| ItemForm {
+          sku: i.sku,
+          name: i.name.clone(),
+          piece: i.piece,
+          retail_price_net: i.retail_price_net,
+          vat: i.vat.clone(),
+          retail_price_gross: i.retail_price_gross,
+          total_retail_price_net: i.total_retail_price_net,
+          total_retail_price_gross: i.total_retail_price_gross,
         })
         .collect(),
       upls_sku: f.upls_sku.iter().map(|u| u.clone().into()).collect(),
