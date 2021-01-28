@@ -92,7 +92,7 @@ pub struct Depreciation {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Lock {
-  CartLock(u32),
+  CartLock(String),
   DeliveryLock(u32),
   InventoryLock(u32),
   None,
@@ -102,7 +102,7 @@ pub enum Lock {
 pub enum Location {
   Stock(u32),
   Delivery(u32),
-  Cart(u32),
+  Cart(String),
   Discard(u32),
 }
 
