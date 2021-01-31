@@ -126,6 +126,7 @@ pub struct CartForm {
   need_invoice: bool,
   payment_kind: PaymentKindForm,
   payments: Vec<PaymentForm>,
+  payable: i32,
   payment_balance: i32,
   profit_net: i32,
   owner_uid: u32,
@@ -216,6 +217,7 @@ impl TryFrom<CartObject> for CartForm {
           amount: p.amount,
         })
         .collect(),
+      payable: f.payable,
       payment_balance: f.payment_balance,
       profit_net: f.profit_net,
       owner_uid: f.owner_uid,
