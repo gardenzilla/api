@@ -250,6 +250,7 @@ pub async fn split_upl(uid: u32, mut services: Services, f: SplitForm) -> ApiRes
     .split(SplitRequest {
       upl: f.upl_id,
       new_upl: f.new_upl,
+      piece: f.piece,
       created_by: uid,
     })
     .await
