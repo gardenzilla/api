@@ -3,7 +3,7 @@ use std::convert::{TryFrom, TryInto};
 use crate::{prelude::*, services::Services};
 use gzlib::proto::upl::{
   upl_obj::{Depreciation as SDepreciation, Kind, Location as SLocation, Lock as SLock},
-  BulkRequest, ByIdRequest, UplObj,
+  BulkRequest, ByIdRequest, DivideRequest, SplitRequest, UplObj,
 };
 use serde::{Deserialize, Serialize};
 use warp::reply;
@@ -31,6 +31,7 @@ pub struct UpdateBestBeforeForm {
 pub struct SplitForm {
   upl_id: String,
   new_upl: String,
+  piece: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -241,4 +242,35 @@ pub async fn get_upl_bulk(_uid: u32, mut services: Services, upl_ids: Vec<String
     result.push(upl.try_into()?);
   }
   Ok(warp::reply::json(&result))
+}
+
+pub async fn split_upl(uid: u32, mut services: Services, f: SplitForm) -> ApiResult {
+  let upl: UplForm = services
+    .upl
+    .split(SplitRequest {
+      upl: f.upl_id,
+      new_upl: f.new_upl,
+      created_by: uid,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+  Ok(reply::json(&upl))
+}
+
+pub async fn divide_upl(uid: u32, mut services: Services, f: DivideForm) -> ApiResult {
+  let upl: UplForm = services
+    .upl
+    .divide(DivideRequest {
+      upl: f.upl_id,
+      new_upl: f.new_upl,
+      requested_amount: f.requested_amount,
+      created_by: uid,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+  Ok(reply::json(&upl))
 }
