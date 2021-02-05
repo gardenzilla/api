@@ -10,7 +10,7 @@ use gzlib::proto::{
     SetSkuPriceRequest, SetStatusRequest, Status, UpdateUplRequest, UplCandidate,
   },
   product::{GetSkuBulkRequest, SkuObj},
-  upl::UplNew,
+  upl::{UplNew, UplObj},
 };
 use serde::{Deserialize, Serialize};
 use tonic::Request;
@@ -514,6 +514,43 @@ pub async fn set_status_closed(procurement_id: u32, uid: u32, mut services: Serv
     }
   }
 
+  // Check if all new UPL IDS are not already taken
+  let new_upl_ids = procurement_object
+    .upls
+    .iter()
+    .map(|u| u.upl_id.clone())
+    .collect::<Vec<String>>();
+
+  let mut all_upls: Vec<UplObj> = Vec::new();
+
+  let mut all_upl_stream = services
+    .upl
+    .get_bulk(gzlib::proto::upl::BulkRequest {
+      upl_ids: new_upl_ids,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+
+  while let Some(upl_obj) = all_upl_stream
+    .message()
+    .await
+    .map_err(|e| ApiError::from(e))?
+  {
+    all_upls.push(upl_obj);
+  }
+
+  // If there is any found UPL with a new ID, then return error!
+  if all_upls.len() > 0 {
+    return Err(
+      ApiError::bad_request(&format!(
+        "A beszerzés nem zárható le. Az alábbi UPL azonosítók már használatban vannak: {:?}",
+        all_upls.into_iter().map(|u| u.id).collect::<Vec<String>>(),
+      ))
+      .into(),
+    );
+  }
+
   // Collect SKU IDs
   let sku_id = procurement_object
     .items
@@ -556,7 +593,7 @@ pub async fn set_status_closed(procurement_id: u32, uid: u32, mut services: Serv
 
   for sku_item in procurement_object.items.iter() {
     // Try find related SKU object
-    let related_sku_object =
+    let sku_obj =
       sku_objects
         .iter()
         .find(|so| so.sku == sku_item.sku)
@@ -565,12 +602,12 @@ pub async fn set_status_closed(procurement_id: u32, uid: u32, mut services: Serv
         ))?;
 
     // Try find related Price object
-    let _ = price_objects
+    let price_obj = price_objects
       .iter()
       .find(|po| po.sku == sku_item.sku)
       .ok_or(ApiError::bad_request(&format!(
         "A beszerzés alábbi SKUja nem rendelkezik eladási árral: #{}, {}",
-        sku_item.sku, related_sku_object.display_name
+        sku_item.sku, sku_obj.display_name
       )))?;
 
     // Collect UPLs related to this SKU item
@@ -580,28 +617,33 @@ pub async fn set_status_closed(procurement_id: u32, uid: u32, mut services: Serv
       .filter(|upl_candidate| upl_candidate.sku == sku_item.sku)
       .map(|uc| UplNew {
         upl_id: uc.upl_id.clone(),
-        product_id: related_sku_object.product_id,
+        product_id: sku_obj.product_id,
         sku: uc.sku,
-        upl_piece: uc.upl_piece,
         best_before: uc.best_before.clone(),
         stock_id: 1, // todo: refact this value to grab from ENV variable
         procurement_id: procurement_object.id,
-        procurement_net_price: sku_item.expected_net_price,
-        divisible_amount: 0,
         is_opened: uc.opened_sku,
         created_by: uid,
+        product_unit: sku_obj.unit.clone(),
+        piece: uc.upl_piece,
+        sku_divisible_amount: sku_obj.divisible_amount,
+        sku_divisible: sku_obj.can_divide,
+        sku_net_price: price_obj.price_net_retail,
+        sku_vat: price_obj.vat.clone(),
+        sku_gross_price: price_obj.price_gross_retail,
+        procurement_net_price_sku: sku_item.expected_net_price,
       })
       .collect::<Vec<UplNew>>();
 
     // Check best_before if SKU is perishable
-    if related_sku_object.perishable {
+    if sku_obj.perishable {
       match u_candidates.iter().all(|uc| uc.best_before.len() > 0) {
         true => (),
         false => {
           return Err(
             ApiError::bad_request(&format!(
               "Az alábbi SKU romlandó, viszont nem minden UPL-hez van lejárat rögzítve: {}",
-              &related_sku_object.display_name
+              &sku_obj.display_name
             ))
             .into(),
           )
@@ -614,14 +656,14 @@ pub async fn set_status_closed(procurement_id: u32, uid: u32, mut services: Serv
       acc
         + match uc.is_opened {
           true => 1,
-          false => uc.upl_piece,
+          false => uc.piece,
         }
     }) != sku_item.ordered_amount
     {
       return Err(
         ApiError::bad_request(&format!(
           "A beszerzés nem zárható le! Az alábbi SKU nem rendelkezik minden UPL-el: {}",
-          &related_sku_object.display_name
+          &sku_obj.display_name
         ))
         .into(),
       );

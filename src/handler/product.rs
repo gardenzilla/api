@@ -1,8 +1,11 @@
 use crate::{prelude::*, services::Services};
-use gzlib::proto::product::{
-  self, FindProductRequest, FindSkuRequest, GetProductBulkRequest, GetProductRequest,
-  GetSkuBulkRequest, GetSkuRequest, NewProduct, NewSku, ProductObj, SkuObj,
-  UpdateProductDiscontinuedRequest, UpdateSkuDiscontinuedRequest, UpdateSkuDivideRequest,
+use gzlib::proto::{
+  product::{
+    self, FindProductRequest, FindSkuRequest, GetProductBulkRequest, GetProductRequest,
+    GetSkuBulkRequest, GetSkuRequest, NewProduct, NewSku, ProductObj, SkuObj,
+    UpdateProductDiscontinuedRequest, UpdateSkuDiscontinuedRequest, UpdateSkuDivideRequest,
+  },
+  upl::{ByProductRequest, BySkuRequest, SetProductUnitRequest, SetSkuDivisibleRequest},
 };
 use product::UpdateProductPerishableRequest;
 use serde::{Deserialize, Serialize};
@@ -185,6 +188,49 @@ pub async fn update_product(
   mut services: Services,
   p: ProductForm,
 ) -> ApiResult {
+  // Get current product version
+  let current_product: ProductForm = services
+    .product
+    .get_product(GetProductRequest { product_id: pid })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
+
+  // Check if we update unit
+  if current_product.unit != p.unit {
+    // Check if we have managed UPLs
+    // If we have any, dont update it!
+    if services
+      .upl
+      .get_by_product(ByProductRequest { product_id: pid })
+      .await
+      .map_err(|e| ApiError::from(e))?
+      .into_inner()
+      .upl_ids
+      .len()
+      > 0
+    {
+      return Err(
+        ApiError::bad_request(
+          "A termék mértékegysége nem változtatható! Már van raktáron hozzá UPL!",
+        )
+        .into(),
+      );
+    }
+
+    // Update UPLs product unit
+    services
+      .upl
+      .set_product_unit(SetProductUnitRequest {
+        product_id: pid,
+        unit: p.unit.clone(),
+      })
+      .await
+      .map_err(|e| ApiError::from(e))?;
+  }
+
+  // Update product
   let product: ProductForm = services
     .product
     .update_product(ProductObj {
@@ -305,6 +351,37 @@ pub async fn get_sku_bulk(_: u32, mut services: Services, sku_ids: Vec<u32>) -> 
 }
 
 pub async fn update_sku(sku: u32, _uid: u32, mut services: Services, s: SkuForm) -> ApiResult {
+  // Get current SKU
+  let current_sku: SkuForm = services
+    .product
+    .get_sku(GetSkuRequest { sku_id: sku })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
+
+  // Check if we update quantity
+  if current_sku.quantity != s.quantity {
+    // Check if we have managed UPLs
+    // If we have any, dont update it!
+    if services
+      .upl
+      .get_by_sku(BySkuRequest { sku: sku })
+      .await
+      .map_err(|e| ApiError::from(e))?
+      .into_inner()
+      .upl_ids
+      .len()
+      > 0
+    {
+      return Err(
+        ApiError::bad_request("A SKU mennyisége nem változtatható! Már van raktáron hozzá UPL!")
+          .into(),
+      );
+    }
+  }
+
+  // Update SKU
   let sku: SkuForm = services
     .product
     .update_sku(SkuObj {
@@ -341,6 +418,7 @@ pub async fn find_sku(_uid: u32, mut services: Services, f: FindForm) -> ApiResu
 }
 
 pub async fn sku_set_divide(_uid: u32, mut services: Services, f: SkuSetDivideForm) -> ApiResult {
+  // Update SKU
   let sku: SkuForm = services
     .product
     .update_sku_divide(UpdateSkuDivideRequest {
@@ -351,6 +429,17 @@ pub async fn sku_set_divide(_uid: u32, mut services: Services, f: SkuSetDivideFo
     .map_err(|e| ApiError::from(e))?
     .into_inner()
     .into();
+
+  // Update UPLs
+  services
+    .upl
+    .set_sku_divisible(SetSkuDivisibleRequest {
+      sku: f.sku,
+      divisible: f.can_divide,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?;
+
   Ok(reply::json(&sku))
 }
 

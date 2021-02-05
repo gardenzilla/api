@@ -3,7 +3,8 @@ use std::convert::{TryFrom, TryInto};
 use crate::{prelude::*, services::Services};
 use gzlib::proto::upl::{
   upl_obj::{Depreciation as SDepreciation, Kind, Location as SLocation, Lock as SLock},
-  BulkRequest, ByIdRequest, DivideRequest, SplitRequest, UplObj,
+  BulkRequest, ByIdRequest, CloseUplRequest, DivideRequest, MergeRequest, OpenUplRequest,
+  SplitRequest, UplObj,
 };
 use serde::{Deserialize, Serialize};
 use warp::reply;
@@ -65,46 +66,41 @@ pub struct RemoveDepreciationPriceForm {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum UplKind {
-  Sku {
-    sku: u32,
-  },
-  BulkSku {
-    sku: u32,
-    upl_pieces: u32,
-  },
-  OpenedSku {
-    sku: u32,
-    amount: u32,
-    successors: Vec<String>,
-  },
-  DerivedProduct {
-    derived_from: String,
-    amount: u32,
-  },
+pub struct OpenForm {
+  upl_id: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Depreciation {
-  depreciation_id: u32,
-  depreciation_comment: String,
-  depreciation_net_price: u32,
+pub struct CloseForm {
+  upl_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct MergeBackForm {
+  upl_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum UplKind {
+  Sku,
+  BulkSku,
+  OpenedSku,
+  DerivedProduct,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Lock {
-  CartLock(String),
-  DeliveryLock(u32),
-  InventoryLock(u32),
-  None,
+  CartLock,
+  DeliveryLock,
+  InventoryLock,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Location {
-  Stock(u32),
-  Delivery(u32),
-  Cart(String),
-  Discard(u32),
+  Stock,
+  Delivery,
+  Cart,
+  Discard,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -112,107 +108,138 @@ pub struct UplForm {
   upl_id: String,
   product_id: u32,
   upl_kind: UplKind,
-  upl_piece: u32,
+  sku: u32,
+  pieces: u32,
+  divisible_amount: u32,
+  sku_divisible_amount: u32,
+  derived_successors: Option<Vec<String>>,
+  derived_from: Option<String>,
   is_healthy: bool,
   best_before: String,
-  depreciation: Option<Depreciation>,
+  is_depreciated: bool,
+  depreciation_id: Option<u32>,
+  depreciation_comment: Option<String>,
+  has_special_price: bool,
   procurement_id: u32,
   procurement_net_price: u32,
+  procurement_net_price_sku: u32,
   is_divisible: bool,
-  divisible_amount: u32,
-  lock: Lock,
+  lock: Option<Lock>,
+  lock_id: Option<String>,
   location: Location,
+  location_id: String,
+  product_unit: String,
+  vat: String,
+  price_net: u32,
+  price_gross: u32,
+  margin_net: u32,
   is_archived: bool,
   created_by: u32,
   created_at: String,
 }
 
-impl From<Kind> for UplKind {
-  fn from(k: Kind) -> Self {
-    match k {
-      Kind::Sku(sku) => UplKind::Sku { sku: sku.sku },
-      Kind::BulkSku(bulk_sku) => UplKind::BulkSku {
-        sku: bulk_sku.sku,
-        upl_pieces: bulk_sku.upl_pieces,
-      },
-      Kind::OpenedSku(opened_sku) => UplKind::OpenedSku {
-        sku: opened_sku.sku,
-        amount: opened_sku.amount,
-        successors: opened_sku.successors,
-      },
-      Kind::DerivedProduct(derived_sku) => UplKind::DerivedProduct {
-        derived_from: derived_sku.derived_from,
-        amount: derived_sku.amount,
-      },
-    }
-  }
-}
-
-impl From<SDepreciation> for Depreciation {
-  fn from(sd: SDepreciation) -> Self {
-    Self {
-      depreciation_id: sd.depreciation_id,
-      depreciation_comment: sd.depreciation_comment,
-      depreciation_net_price: sd.depreciation_net_price,
-    }
-  }
-}
-
-impl From<SLock> for Lock {
-  fn from(sl: SLock) -> Self {
-    match sl {
-      SLock::CartLock(id) => Self::CartLock(id),
-      SLock::DeliveryLock(id) => Self::DeliveryLock(id),
-      SLock::InventoryLock(id) => Self::InventoryLock(id),
-      SLock::None(_) => Self::None,
-    }
-  }
-}
-
-impl From<SLocation> for Location {
-  fn from(sl: SLocation) -> Self {
-    match sl {
-      SLocation::Stock(id) => Self::Stock(id),
-      SLocation::Delivery(id) => Self::Delivery(id),
-      SLocation::Cart(id) => Self::Cart(id),
-      SLocation::Discard(id) => Self::Discard(id),
-    }
-  }
-}
-
 impl TryFrom<UplObj> for UplForm {
   type Error = ApiError;
 
-  fn try_from(upl: UplObj) -> Result<Self, Self::Error> {
+  fn try_from(u: UplObj) -> Result<Self, Self::Error> {
     let res = Self {
-      upl_id: upl.id,
-      product_id: upl.product_id,
-      upl_kind: upl
+      upl_id: u.id,
+      product_id: u.product_id,
+      upl_kind: match u
         .kind
-        .ok_or(ApiError::internal_error("Missing UPL KIND"))?
-        .into(),
-      upl_piece: upl.upl_piece,
-      is_healthy: upl.is_healty,
-      best_before: upl.best_before,
-      depreciation: match upl.depreciation {
-        Some(dp) => Some(dp.into()),
+        .as_ref()
+        .ok_or(ApiError::internal_error("NO UPL KIND!"))?
+      {
+        Kind::Sku(_) => UplKind::Sku,
+        Kind::BulkSku(_) => UplKind::BulkSku,
+        Kind::OpenedSku(_) => UplKind::OpenedSku,
+        Kind::DerivedProduct(_) => UplKind::DerivedProduct,
+      },
+      sku: u.sku_id,
+      pieces: u.upl_piece,
+      divisible_amount: match u
+        .kind
+        .as_ref()
+        .ok_or(ApiError::internal_error("NO UPL KIND!"))?
+      {
+        Kind::Sku(_) => 1,
+        Kind::BulkSku(_) => 1,
+        Kind::OpenedSku(_opened_sku) => _opened_sku.amount,
+        Kind::DerivedProduct(_derived_product) => _derived_product.amount,
+      },
+      sku_divisible_amount: u.sku_divisible_amount,
+      derived_successors: match u
+        .kind
+        .as_ref()
+        .ok_or(ApiError::internal_error("NO UPL KIND!"))?
+      {
+        Kind::OpenedSku(_opened_sku) => Some(_opened_sku.successors.to_owned()),
+        _ => None,
+      },
+      derived_from: match u
+        .kind
+        .as_ref()
+        .ok_or(ApiError::internal_error("NO UPL KIND!"))?
+      {
+        Kind::DerivedProduct(_derived_product) => Some(_derived_product.derived_from.to_string()),
+        _ => None,
+      },
+      is_healthy: u.is_healty,
+      best_before: u.best_before,
+      is_depreciated: u.depreciation.is_some(),
+      depreciation_id: match u.depreciation.as_ref() {
+        Some(dep) => Some(dep.depreciation_id),
         None => None,
       },
-      procurement_id: upl.procurement_id,
-      procurement_net_price: upl.procurement_net_price,
-      is_divisible: upl.is_divisible,
-      divisible_amount: upl.divisible_amount,
-      lock: upl
-        .lock
-        .ok_or(ApiError::internal_error("Missing LOCK"))?
-        .into(),
-      location: upl
+      depreciation_comment: match u.depreciation.as_ref() {
+        Some(dep) => Some(dep.depreciation_comment.to_string()),
+        None => None,
+      },
+      has_special_price: u.has_special_price,
+      procurement_id: u.procurement_id,
+      procurement_net_price: u.procurement_net_price,
+      procurement_net_price_sku: u.procurement_net_price_sku,
+      is_divisible: u.is_divisible,
+      lock: match u.lock.as_ref().ok_or(ApiError::internal_error("NO LOCK"))? {
+        SLock::CartLock(lid) => Some(Lock::CartLock),
+        SLock::DeliveryLock(lid) => Some(Lock::DeliveryLock),
+        SLock::InventoryLock(lid) => Some(Lock::InventoryLock),
+        SLock::None(_) => None,
+      },
+      lock_id: match u.lock.as_ref().ok_or(ApiError::internal_error("NO LOCK"))? {
+        SLock::CartLock(lid) => Some(lid.to_string()),
+        SLock::DeliveryLock(lid) => Some(lid.to_string()),
+        SLock::InventoryLock(lid) => Some(lid.to_string()),
+        SLock::None(_) => None,
+      },
+      location: match u
         .location
-        .ok_or(ApiError::internal_error("Missing LOCATION"))?
-        .into(),
-      is_archived: upl.is_archived,
-      created_by: upl.created_by,
-      created_at: upl.created_at,
+        .as_ref()
+        .ok_or(ApiError::internal_error("NO LOCATION"))?
+      {
+        SLocation::Stock(_) => Location::Stock,
+        SLocation::Delivery(_) => Location::Delivery,
+        SLocation::Cart(_) => Location::Cart,
+        SLocation::Discard(_) => Location::Discard,
+      },
+      location_id: match u
+        .location
+        .as_ref()
+        .ok_or(ApiError::internal_error("NO LOCATION"))?
+      {
+        SLocation::Stock(lid) => lid.to_string(),
+        SLocation::Delivery(lid) => lid.to_string(),
+        SLocation::Cart(lid) => lid.to_string(),
+        SLocation::Discard(lid) => lid.to_string(),
+      },
+      product_unit: u.product_unit,
+      vat: u.vat,
+      price_net: u.price_net,
+      price_gross: u.price_gross,
+      margin_net: u.margin_net,
+      is_archived: u.is_archived,
+      created_by: u.created_by,
+      created_at: u.created_at,
     };
     Ok(res)
   }
@@ -274,4 +301,39 @@ pub async fn divide_upl(uid: u32, mut services: Services, f: DivideForm) -> ApiR
     .into_inner()
     .try_into()?;
   Ok(reply::json(&upl))
+}
+
+pub async fn open(_uid: u32, mut services: Services, f: OpenForm) -> ApiResult {
+  let upl: UplForm = services
+    .upl
+    .open_upl(OpenUplRequest { upl_id: f.upl_id })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+  Ok(reply::json(&upl))
+}
+
+pub async fn close(_uid: u32, mut services: Services, f: CloseForm) -> ApiResult {
+  let upl: UplForm = services
+    .upl
+    .close_upl(CloseUplRequest { upl_id: f.upl_id })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+  Ok(reply::json(&upl))
+}
+
+pub async fn merge_back(uid: u32, mut services: Services, f: MergeBackForm) -> ApiResult {
+  let _ = services
+    .upl
+    .merge_back(MergeRequest {
+      upl_to_merge_back: f.upl_id,
+      created_by: uid,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?;
+
+  Ok(reply::json(&()))
 }

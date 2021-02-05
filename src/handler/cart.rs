@@ -10,8 +10,9 @@ use crate::{
 use gzlib::proto::{
   self,
   cash::NewTransaction,
-  product::SkuObj,
+  product::{GetProductRequest, GetSkuRequest, SkuObj},
   purchase::{upl_info_object::UplKindOpenedSku, CartInfoObject, CartObject},
+  upl::upl_obj,
 };
 use proto::{
   customer::GetByIdRequest,
@@ -548,247 +549,99 @@ pub async fn cart_add_upl(uid: u32, mut services: Services, f: CartAddUplForm) -
     _ => (),
   }
 
-  let ukind: UKind = match upl_obj.kind.unwrap() {
-    proto::upl::upl_obj::Kind::Sku(s) => UKind::Sku {
-      sku: s.sku,
-      piece: 1,
+  // Query SKU
+  let sku = services
+    .product
+    .get_sku(GetSkuRequest {
+      sku_id: upl_obj.sku_id,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+
+  // Query Product
+  let product = services
+    .product
+    .get_product(GetProductRequest {
+      product_id: upl_obj.product_id,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+
+  // Create UPL info object
+  let upl_info_object = UplInfoObject {
+    upl_id: upl_obj.id.clone(),
+    name: match upl_obj
+      .kind
+      .clone()
+      .ok_or(ApiError::internal_error("NO UPL KIND"))?
+    {
+      upl_obj::Kind::Sku(_) => sku.display_name,
+      upl_obj::Kind::BulkSku(_) => sku.display_name,
+      upl_obj::Kind::OpenedSku(opened_sku) => format!(
+        "{}, {} {}",
+        product.name,
+        opened_sku.amount,
+        upl_obj.product_unit.clone()
+      ),
+      upl_obj::Kind::DerivedProduct(derived_product) => format!(
+        "{}, {} {}",
+        product.name,
+        derived_product.amount,
+        upl_obj.product_unit.clone()
+      ),
     },
-    proto::upl::upl_obj::Kind::BulkSku(s) => UKind::Sku {
-      sku: s.sku,
-      piece: s.upl_pieces,
-    },
-    proto::upl::upl_obj::Kind::OpenedSku(s) => UKind::OpenedSku {
-      sku: s.sku,
-      pid: upl_obj.product_id,
-      amount: s.amount,
-    },
-    proto::upl::upl_obj::Kind::DerivedProduct(s) => UKind::DerivedProduct {
-      derived_from_upl: s.derived_from,
-      pid: upl_obj.product_id,
-      amount: s.amount,
-    },
-  };
-
-  let cart: CartForm = match ukind {
-    UKind::Sku { sku, piece } => {
-      // Query SKU
-      let sku_obj: SkuObj = services
-        .product
-        .get_sku(proto::product::GetSkuRequest { sku_id: sku })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-
-      // Then query its price
-      let price_obj: PriceObject = services
-        .pricing
-        .get_price(proto::pricing::GetPriceRequest { sku: sku })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-
-      // Build up Upl Info Object
-      let upl_info_object = UplInfoObject {
-        upl_id: upl_obj.id.clone(),
-        name: sku_obj.display_name,
-        retail_net_price: price_obj.price_net_retail,
-        vat: price_obj.vat,
-        retail_gross_price: price_obj.price_gross_retail,
-        procurement_net_price: upl_obj.procurement_net_price,
-        best_before: upl_obj.best_before.clone(),
-        depreciated: upl_obj.depreciation.is_some(),
-        upl_kind: Some(proto::purchase::upl_info_object::UplKind::Sku(UplKindSku {
-          sku: sku,
-          piece: piece,
-        })),
-      };
-
-      // Add UplInfoObject to Cart
-      services
-        .purchase
-        .cart_add_upl(proto::purchase::CartAddUplRequest {
-          cart_id: cart_obj.id.clone(),
-          upl: Some(upl_info_object),
-        })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner()
-        .try_into()?
-    }
-    UKind::OpenedSku { sku, pid, amount } => {
-      // Query SKU
-      let sku_obj: SkuObj = services
-        .product
-        .get_sku(proto::product::GetSkuRequest { sku_id: sku })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-
-      // Check this to avoid zero division at price calculation
-      if sku_obj.divisible_amount == 0 {
-        return Err(
-          ApiError::bad_request("A kért UPL bontott, de a termék már nem kimérhető! Állítsa át!")
-            .into(),
-        );
-      }
-
-      // Query Product
-      let product_obj: ProductObj = services
-        .product
-        .get_product(proto::product::GetProductRequest {
-          product_id: sku_obj.product_id,
-        })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-
-      // Then query its price
-      let price_obj: PriceObject = services
-        .pricing
-        .get_price(proto::pricing::GetPriceRequest { sku: sku })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-
-      // Build up Upl Info Object
-      let upl_info_object = UplInfoObject {
-        upl_id: upl_obj.id.clone(),
-        name: format!("{}, {} {}", product_obj.name, amount, product_obj.unit),
-        retail_net_price: ((price_obj.price_net_retail as f32 / sku_obj.divisible_amount as f32)
-          * amount as f32)
-          .round() as u32,
-        vat: price_obj.vat,
-        retail_gross_price: ((price_obj.price_gross_retail as f32
-          / sku_obj.divisible_amount as f32)
-          * amount as f32)
-          .round() as u32,
-        procurement_net_price: ((upl_obj.procurement_net_price as f32
-          / sku_obj.divisible_amount as f32)
-          * amount as f32)
-          .round() as u32,
-        best_before: upl_obj.best_before.clone(),
-        depreciated: upl_obj.depreciation.is_some(),
-        upl_kind: Some(proto::purchase::upl_info_object::UplKind::OpenedSku(
-          UplKindOpenedSku {
-            product_id: pid,
-            amount: amount,
-          },
-        )),
-      };
-
-      // Add UplInfoObject to Cart
-      services
-        .purchase
-        .cart_add_upl(proto::purchase::CartAddUplRequest {
-          cart_id: cart_obj.id.clone(),
-          upl: Some(upl_info_object),
-        })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner()
-        .try_into()?
-    }
-    UKind::DerivedProduct {
-      derived_from_upl,
-      pid,
-      amount,
-    } => {
-      // Query parent UPL
-      let parent_upl_obj: UplObj = services
-        .upl
-        .get_by_id(proto::upl::ByIdRequest {
-          upl_id: derived_from_upl,
-        })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-
-      let parent_sku = match parent_upl_obj.kind.unwrap() {
-        // Parent of a devirev product must be opened sku
-        proto::upl::upl_obj::Kind::OpenedSku(o) => o.sku,
-        _ => {
-          return Err(
-            ApiError::internal_error(
-              "A kért kimért UPL szülője nem bontott termék! Lehetetlen hiba!",
-            )
-            .into(),
-          )
+    retail_net_price: upl_obj.price_net,
+    vat: upl_obj.vat.clone(),
+    retail_gross_price: upl_obj.price_gross,
+    procurement_net_price: upl_obj.procurement_net_price,
+    best_before: upl_obj.best_before.clone(),
+    depreciated: upl_obj.depreciation.is_some(),
+    upl_kind: Some(
+      match upl_obj
+        .kind
+        .ok_or(ApiError::internal_error("NO UPL KIND"))?
+      {
+        proto::upl::upl_obj::Kind::Sku(_sku) => {
+          proto::purchase::upl_info_object::UplKind::Sku(UplKindSku {
+            sku: _sku.sku,
+            piece: 1,
+          })
         }
-      };
-
-      // Query SKU
-      let sku_obj: SkuObj = services
-        .product
-        .get_sku(proto::product::GetSkuRequest { sku_id: parent_sku })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-
-      // Check this to avoid zero division at price calculation
-      if sku_obj.divisible_amount == 0 {
-        return Err(
-          ApiError::bad_request("A kért UPL bontott, de a termék már nem kimérhető! Állítsa át!")
-            .into(),
-        );
-      }
-
-      // Query Product
-      let product_obj: ProductObj = services
-        .product
-        .get_product(proto::product::GetProductRequest {
-          product_id: sku_obj.product_id,
-        })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-
-      // Then query its price
-      let price_obj: PriceObject = services
-        .pricing
-        .get_price(proto::pricing::GetPriceRequest { sku: parent_sku })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
-
-      // Build up Upl Info Object
-      let upl_info_object = UplInfoObject {
-        upl_id: upl_obj.id.clone(),
-        name: format!("{}, {} {}", product_obj.name, amount, product_obj.unit),
-        retail_net_price: ((price_obj.price_net_retail as f32 / sku_obj.divisible_amount as f32)
-          * amount as f32)
-          .round() as u32,
-        vat: price_obj.vat,
-        retail_gross_price: ((price_obj.price_gross_retail as f32
-          / sku_obj.divisible_amount as f32)
-          * amount as f32)
-          .round() as u32,
-        procurement_net_price: ((upl_obj.procurement_net_price as f32
-          / sku_obj.divisible_amount as f32)
-          * amount as f32)
-          .round() as u32,
-        best_before: upl_obj.best_before.clone(),
-        depreciated: upl_obj.depreciation.is_some(),
-        upl_kind: Some(proto::purchase::upl_info_object::UplKind::OpenedSku(
-          UplKindOpenedSku {
-            product_id: pid,
-            amount: amount,
-          },
-        )),
-      };
-
-      // Add UplInfoObject to Cart
-      services
-        .purchase
-        .cart_add_upl(proto::purchase::CartAddUplRequest {
-          cart_id: cart_obj.id.clone(),
-          upl: Some(upl_info_object),
-        })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner()
-        .try_into()?
-    }
+        proto::upl::upl_obj::Kind::BulkSku(_bulk_sku) => {
+          proto::purchase::upl_info_object::UplKind::Sku(UplKindSku {
+            sku: _bulk_sku.sku,
+            piece: _bulk_sku.upl_pieces,
+          })
+        }
+        proto::upl::upl_obj::Kind::OpenedSku(_opened_sku) => {
+          proto::purchase::upl_info_object::UplKind::OpenedSku(UplKindOpenedSku {
+            product_id: upl_obj.product_id,
+            amount: _opened_sku.amount,
+          })
+        }
+        proto::upl::upl_obj::Kind::DerivedProduct(_derived_product) => {
+          proto::purchase::upl_info_object::UplKind::OpenedSku(UplKindOpenedSku {
+            product_id: upl_obj.product_id,
+            amount: _derived_product.amount,
+          })
+        }
+      },
+    ),
   };
+
+  // Try add UPL InfoObject to Cart
+  let cart: CartForm = services
+    .purchase
+    .cart_add_upl(proto::purchase::CartAddUplRequest {
+      cart_id: cart_obj.id.clone(),
+      upl: Some(upl_info_object),
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
 
   // Try to lock UPL to this cart
   match services
