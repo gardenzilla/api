@@ -180,7 +180,7 @@ pub struct UplForm {
   vat: String,
   price_net: u32,
   price_gross: u32,
-  margin_net: u32,
+  margin_net: i32,
   is_archived: bool,
   created_by: u32,
   created_at: String,
