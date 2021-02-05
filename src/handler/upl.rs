@@ -1,9 +1,13 @@
-use std::convert::{TryFrom, TryInto};
+use std::{
+  collections::HashMap,
+  convert::{TryFrom, TryInto},
+};
 
 use crate::{prelude::*, services::Services};
 use gzlib::proto::upl::{
   upl_obj::{Depreciation as SDepreciation, Kind, Location as SLocation, Lock as SLock},
-  BulkRequest, ByIdRequest, CloseUplRequest, DivideRequest, MergeRequest, OpenUplRequest,
+  BulkRequest, ByIdRequest, BySkuAndLocationRequest, CloseUplRequest, DivideRequest,
+  LocationInfoBulkRequest, LocationInfoRequest, LocationInfoResponse, MergeRequest, OpenUplRequest,
   SplitRequest, UplObj,
 };
 use serde::{Deserialize, Serialize};
@@ -78,6 +82,50 @@ pub struct CloseForm {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MergeBackForm {
   upl_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetBySkuAndStockForm {
+  sku: u32,
+  stock_id: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct GetLocationInfoForm {
+  sku: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct StockInfoForm {
+  total: u32,
+  healthy: u32,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LocationInfoForm {
+  sku: u32,
+  stocks: HashMap<u32, StockInfoForm>,
+}
+
+impl From<LocationInfoResponse> for LocationInfoForm {
+  fn from(f: LocationInfoResponse) -> Self {
+    Self {
+      sku: f.sku,
+      stocks: f
+        .stocks
+        .into_iter()
+        .map(|(k, v)| {
+          (
+            k,
+            StockInfoForm {
+              total: v.total,
+              healthy: v.healthy,
+            },
+          )
+        })
+        .collect::<HashMap<u32, StockInfoForm>>(),
+    }
+  }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -246,14 +294,25 @@ impl TryFrom<UplObj> for UplForm {
 }
 
 pub async fn get_upl_by_id(upl_id: String, _uid: u32, mut services: Services) -> ApiResult {
-  let upl: UplForm = services
-    .upl
-    .get_by_id(ByIdRequest { upl_id })
-    .await
-    .map_err(|e| ApiError::from(e))?
-    .into_inner()
-    .try_into()?;
-  Ok(reply::json(&upl))
+  let mut res: Option<UplForm> = None;
+  match services.upl.get_by_id(ByIdRequest { upl_id }).await {
+    Ok(upl) => {
+      res = Some(upl.into_inner().try_into()?);
+    }
+    Err(_) => (),
+  }
+  Ok(reply::json(&res))
+}
+
+pub async fn get_upl_by_id_archive(upl_id: String, _uid: u32, mut services: Services) -> ApiResult {
+  let mut res: Option<UplForm> = None;
+  match services.upl.get_by_id_archive(ByIdRequest { upl_id }).await {
+    Ok(upl) => {
+      res = Some(upl.into_inner().try_into()?);
+    }
+    Err(_) => (),
+  }
+  Ok(reply::json(&res))
 }
 
 pub async fn get_upl_bulk(_uid: u32, mut services: Services, upl_ids: Vec<String>) -> ApiResult {
@@ -336,4 +395,54 @@ pub async fn merge_back(uid: u32, mut services: Services, f: MergeBackForm) -> A
     .map_err(|e| ApiError::from(e))?;
 
   Ok(reply::json(&()))
+}
+
+pub async fn get_by_sku_stock(
+  _uid: u32,
+  mut services: Services,
+  f: GetBySkuAndStockForm,
+) -> ApiResult {
+  let upls: Vec<String> = services
+    .upl
+    .get_by_sku_and_location(BySkuAndLocationRequest {
+      sku: f.sku,
+      location: Some(gzlib::proto::upl::by_sku_and_location_request::Location::Stock(f.stock_id)),
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .upl_ids;
+
+  Ok(reply::json(&()))
+}
+
+pub async fn get_location_info(
+  uid: u32,
+  mut services: Services,
+  f: GetLocationInfoForm,
+) -> ApiResult {
+  let res: LocationInfoForm = services
+    .upl
+    .get_location_info(LocationInfoRequest { sku: f.sku })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
+
+  Ok(reply::json(&res))
+}
+
+pub async fn get_location_info_bulk(uid: u32, mut services: Services, f: Vec<u32>) -> ApiResult {
+  let mut all = services
+    .upl
+    .get_location_info_bulk(LocationInfoBulkRequest { sku: f })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+
+  let mut result: Vec<LocationInfoForm> = Vec::new();
+  while let Some(linfo) = all.message().await.map_err(|e| ApiError::from(e))? {
+    result.push(linfo.into());
+  }
+  Ok(warp::reply::json(&result))
 }
