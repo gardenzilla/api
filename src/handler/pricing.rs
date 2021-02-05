@@ -1,7 +1,10 @@
 use crate::{prelude::*, services::Services};
-use gzlib::proto::pricing::{
-  GetPriceBulkRequest, GetPriceRequest, PriceChangesRequest, PriceHistoryObject, PriceObject,
-  SetPriceRequest,
+use gzlib::proto::{
+  pricing::{
+    GetPriceBulkRequest, GetPriceRequest, PriceChangesRequest, PriceHistoryObject, PriceObject,
+    SetPriceRequest,
+  },
+  upl::SetSkuPriceRequest,
 };
 use serde::{Deserialize, Serialize};
 use warp::reply;
@@ -66,12 +69,13 @@ impl From<PriceObject> for PriceForm {
 }
 
 pub async fn create_new(uid: u32, mut services: Services, pf: PriceForm) -> ApiResult {
+  // Store price to prices DB
   let price_form: PriceForm = services
     .pricing
     .set_price(SetPriceRequest {
       sku: pf.sku,
       price_net_retail: pf.price_net_retail,
-      vat: pf.vat,
+      vat: pf.vat.clone(),
       price_gross_retail: pf.price_gross_retail,
       created_by: uid,
     })
@@ -79,6 +83,20 @@ pub async fn create_new(uid: u32, mut services: Services, pf: PriceForm) -> ApiR
     .map_err(|e| ApiError::from(e))?
     .into_inner()
     .into();
+
+  // Store prices to related UPLs
+  services
+    .upl
+    .set_sku_price(SetSkuPriceRequest {
+      sku: pf.sku,
+      net_price: pf.price_net_retail,
+      vat: pf.vat,
+      gross_price: pf.price_gross_retail,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?;
+
+  // Return price_form as JSON
   Ok(reply::json(&price_form))
 }
 

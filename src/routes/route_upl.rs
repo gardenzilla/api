@@ -82,6 +82,20 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and(warp::body::json())
     .and_then(handler::upl::get_location_info_bulk);
 
+  let set_depreciation = warp::path!("set_depreciation")
+    .and(warp::put())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::upl::set_depreciation);
+
+  let set_depreciation_price = warp::path!("set_depreciation_price")
+    .and(warp::put())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::upl::set_depreciation_price);
+
   warp::path!("upl" / ..)
     .and(balanced_or_tree!(upl_get_by_id
       .or(upl_get_by_id_archive)
@@ -93,6 +107,8 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
       .or(close)
       .or(get_location_info)
       .or(get_location_info_bulk)
+      .or(set_depreciation)
+      .or(set_depreciation_price)
       .or(merge_back)))
     .boxed()
 }

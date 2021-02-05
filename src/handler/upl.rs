@@ -6,9 +6,9 @@ use std::{
 use crate::{prelude::*, services::Services};
 use gzlib::proto::upl::{
   upl_obj::{Depreciation as SDepreciation, Kind, Location as SLocation, Lock as SLock},
-  BulkRequest, ByIdRequest, BySkuAndLocationRequest, CloseUplRequest, DivideRequest,
-  LocationInfoBulkRequest, LocationInfoRequest, LocationInfoResponse, MergeRequest, OpenUplRequest,
-  SplitRequest, UplObj,
+  BulkRequest, ByIdRequest, BySkuAndLocationRequest, CloseUplRequest, DepreciationPriceRequest,
+  DepreciationRequest, DivideRequest, LocationInfoBulkRequest, LocationInfoRequest,
+  LocationInfoResponse, MergeRequest, OpenUplRequest, SplitRequest, UplObj,
 };
 use serde::{Deserialize, Serialize};
 use warp::reply;
@@ -432,7 +432,7 @@ pub async fn get_location_info(
   Ok(reply::json(&res))
 }
 
-pub async fn get_location_info_bulk(uid: u32, mut services: Services, f: Vec<u32>) -> ApiResult {
+pub async fn get_location_info_bulk(_uid: u32, mut services: Services, f: Vec<u32>) -> ApiResult {
   let mut all = services
     .upl
     .get_location_info_bulk(LocationInfoBulkRequest { sku: f })
@@ -445,4 +445,45 @@ pub async fn get_location_info_bulk(uid: u32, mut services: Services, f: Vec<u32
     result.push(linfo.into());
   }
   Ok(warp::reply::json(&result))
+}
+
+pub async fn set_depreciation(
+  uid: u32,
+  mut services: Services,
+  f: SetDepreciationForm,
+) -> ApiResult {
+  let res: UplForm = services
+    .upl
+    .set_depreciation(DepreciationRequest {
+      upl: f.upl_id,
+      depreciation_id: f.depreciation_id,
+      depreciation_comment: f.depreciation_comment,
+      created_by: uid,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+
+  Ok(reply::json(&res))
+}
+
+pub async fn set_depreciation_price(
+  uid: u32,
+  mut services: Services,
+  f: SetDepreciationPriceForm,
+) -> ApiResult {
+  let res: UplForm = services
+    .upl
+    .set_depreciation_price(DepreciationPriceRequest {
+      upl: f.upl_id,
+      depreciation_net_price: f.depreciation_net_price,
+      created_by: uid,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+
+  Ok(reply::json(&res))
 }
