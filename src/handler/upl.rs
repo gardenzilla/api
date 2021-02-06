@@ -426,7 +426,7 @@ pub async fn get_by_sku_stock(
     .into_inner()
     .upl_ids;
 
-  Ok(reply::json(&()))
+  Ok(reply::json(&upls))
 }
 
 pub async fn get_location_info(
