@@ -13,10 +13,10 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::upl::get_upl_by_id);
 
   let upl_get_by_id_archive = warp::path!("archive")
-    .and(warp::path::param())
-    .and(warp::get())
+    .and(warp::post())
     .and(auth())
     .and(add(services.clone()))
+    .and(warp::body::json())
     .and_then(handler::upl::get_upl_by_id_archive);
 
   let upl_get_bulk = warp::path!("bulk")

@@ -99,6 +99,8 @@ pub struct GetLocationInfoForm {
 pub struct StockInfoForm {
   total: u32,
   healthy: u32,
+  bulk: u32,
+  opened: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -120,12 +122,19 @@ impl From<LocationInfoResponse> for LocationInfoForm {
             StockInfoForm {
               total: v.total,
               healthy: v.healthy,
+              bulk: v.bulk,
+              opened: v.opened,
             },
           )
         })
         .collect::<HashMap<u32, StockInfoForm>>(),
     }
   }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ArchiveForm {
+  upl_id: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -304,9 +313,13 @@ pub async fn get_upl_by_id(upl_id: String, _uid: u32, mut services: Services) ->
   Ok(reply::json(&res))
 }
 
-pub async fn get_upl_by_id_archive(upl_id: String, _uid: u32, mut services: Services) -> ApiResult {
+pub async fn get_upl_by_id_archive(_uid: u32, mut services: Services, f: ArchiveForm) -> ApiResult {
   let mut res: Option<UplForm> = None;
-  match services.upl.get_by_id_archive(ByIdRequest { upl_id }).await {
+  match services
+    .upl
+    .get_by_id_archive(ByIdRequest { upl_id: f.upl_id })
+    .await
+  {
     Ok(upl) => {
       res = Some(upl.into_inner().try_into()?);
     }
