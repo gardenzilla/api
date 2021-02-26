@@ -1,6 +1,7 @@
 pub mod cart;
 pub mod cash;
 pub mod customer;
+pub mod invoice;
 pub mod login;
 pub mod pricing;
 pub mod procurement;

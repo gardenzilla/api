@@ -7,11 +7,19 @@ use crate::{
   prelude::*,
   services::{self, Services},
 };
+use chrono::{DateTime, NaiveDate, Utc};
 use gzlib::proto::{
   self,
   cash::NewTransaction,
+  invoice::{
+    invoice_form::{Customer, PaymentKind},
+    InvoiceForm,
+  },
   product::{GetProductRequest, GetSkuRequest, SkuObj},
-  purchase::{upl_info_object::UplKindOpenedSku, CartInfoObject, CartObject},
+  purchase::{
+    upl_info_object::UplKindOpenedSku, CartInfoObject, CartObject, CartSetDocumentRequest,
+    DocumentKind, PurchaseByIdRequest, PurchaseSetInvoiceIdRequest,
+  },
   upl::upl_obj,
 };
 use proto::{
@@ -27,16 +35,19 @@ use proto::{
 use serde::{Deserialize, Serialize};
 use warp::reply;
 
-#[derive(Serialize, Deserialize, Debug)]
+use super::purchase::PurchaseForm;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CustomerForm {
   id: u32,
   name: String,
   zip: String,
   location: String,
   street: String,
+  tax_number: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartInfoForm {
   id: String,
   customer_name: String,
@@ -61,13 +72,13 @@ impl From<CartInfoObject> for CartInfoForm {
   }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum UplKindForm {
   Sku { sku: u32, piece: u32 },
   OpenedSku { product_id: u32, amount: u32 },
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UplInfoForm {
   upl_id: String,
   kind: UplKindForm,
@@ -80,14 +91,14 @@ pub struct UplInfoForm {
   depreciated: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ItemKindForm {
   Sku,
   DerivedProduct,
   DepreciatedProduct,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ItemForm {
   sku: u32,
   name: String,
@@ -99,31 +110,44 @@ pub struct ItemForm {
   total_retail_price_gross: u32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PaymentKindForm {
   Cash,
   Card,
   Transfer,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PaymentForm {
-  id: String,
-  amount: i32,
+  pub id: String,
+  pub amount: i32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct LoyaltyTransaction {
+  pub loyalty_account_id: String,
+  pub transaction_id: String,
+  pub burned_points: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartForm {
   ancestor: String,
   id: String,
   customer: Option<CustomerForm>,
-  discount_percentage: u32,
+  commitment_id: String,
+  commitment_discount_percentage: u32,
+  loyalty_card_id: String,
+  loyalty_account_id: String,
+  loyalty_level: String,
   shopping_list: Vec<ItemForm>,
   upls_sku: Vec<UplInfoForm>,
   upls_unique: Vec<UplInfoForm>,
   total_net: u32,
   total_vat: u32,
   total_gross: u32,
+  commitment_discount_amount_gross: u32,
+  burned_points: Vec<LoyaltyTransaction>,
   need_invoice: bool,
   payment_kind: PaymentKindForm,
   payments: Vec<PaymentForm>,
@@ -181,10 +205,10 @@ impl TryFrom<CartObject> for CartForm {
           zip: c.zip.clone(),
           location: c.location.clone(),
           street: c.street.clone(),
+          tax_number: c.tax_number.clone(),
         }),
         None => None,
       },
-      discount_percentage: f.discount_percentage,
       shopping_list: f
         .shopping_list
         .iter()
@@ -227,77 +251,98 @@ impl TryFrom<CartObject> for CartForm {
       payment_duedate: f.payment_duedate,
       created_by: f.created_by,
       created_at: f.created_at,
+      commitment_id: f.commitment_id,
+      commitment_discount_percentage: f.commitment_discount_percentage,
+      loyalty_card_id: f.loyalty_card_id,
+      loyalty_account_id: f.loyalty_account_id,
+      loyalty_level: f.loyalty_level,
+      commitment_discount_amount_gross: f.commitment_discount_amount_gross,
+      burned_points: f
+        .burned_points
+        .into_iter()
+        .map(|tr| LoyaltyTransaction {
+          loyalty_account_id: tr.loyalty_account_id,
+          transaction_id: tr.transaction_id,
+          burned_points: tr.burned_points,
+        })
+        .collect::<Vec<LoyaltyTransaction>>(),
     };
     Ok(res)
   }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NewCartForm {
   store_id: u32,
   created_by: u32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartSetSkuPieceForm {
   cart_id: String,
   sku: u32,
   piece: u32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartSetOwnerForm {
   cart_id: String,
   owner_uid: u32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CartSetInvoiceForm {
+  cart_id: String,
+  need_invoice: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartSetStoreForm {
   cart_id: String,
   store_id: u32,
 }
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartAddCustomerForm {
   cart_id: String,
   customer_id: u32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartRemoveCustomerForm {
   cart_id: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartSetPaymentForm {
   cart_id: String,
   payment_kind: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartCloseForm {
   cart_id: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartAddSkuForm {
   cart_id: String,
   sku_id: u32,
   piece: u32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartRemoveSkuForm {
   cart_id: String,
   sku_id: u32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartAddUplForm {
   cart_id: String,
   upl_id: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartRemoveUplForm {
   cart_id: String,
   upl_id: String,
@@ -320,7 +365,7 @@ enum UKind {
   },
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartAddPaymentForm {
   cart_id: String,
   kind: String,
@@ -827,6 +872,64 @@ pub async fn cart_close(uid: u32, mut services: Services, f: CartCloseForm) -> A
     .await
     .map_err(|e| ApiError::from(e))?;
 
+  // Create invoice if needed
+  if cart_closed.need_invoice {
+    // Query purchase
+    let purchase: PurchaseForm = services
+      .purchase
+      .purchase_get_by_id(PurchaseByIdRequest {
+        purchase_id: cart_closed.id,
+      })
+      .await
+      .map_err(|e| ApiError::from(e))?
+      .into_inner()
+      .into();
+
+    // Convert purchase form into invoice request
+    let invoice_request: InvoiceForm = purchase.clone().into();
+
+    // Try start invoice creation as bg task
+    let invoice_data = services
+      .invoice
+      .create_new(invoice_request)
+      .await
+      .map_err(|e| ApiError::from(e))?
+      .into_inner();
+
+    // Set invoice internal ID to purchase
+    services
+      .purchase
+      .purchase_set_invoice_id(PurchaseSetInvoiceIdRequest {
+        purchase_id: purchase.purchase_id,
+        invoice_id: invoice_data.id,
+      })
+      .await
+      .map_err(|e| ApiError::from(e))?;
+  }
+
   // Return nothing if success
   Ok(reply::json(&""))
+}
+
+pub async fn cart_set_need_invoice(
+  uid: u32,
+  mut services: Services,
+  f: CartSetInvoiceForm,
+) -> ApiResult {
+  // Check if cart valid
+  let res: CartForm = services
+    .purchase
+    .cart_set_document(CartSetDocumentRequest {
+      cart_id: f.cart_id,
+      document_kind: match f.need_invoice {
+        true => DocumentKind::Invoice,
+        false => DocumentKind::Receipt,
+      } as i32,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+
+  Ok(reply::json(&res))
 }
