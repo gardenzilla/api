@@ -3,10 +3,10 @@ use std::env;
 use gzlib::proto::{
   cash::cash_client::CashClient, customer::customer_client::CustomerClient,
   email::email_client::EmailClient, invoice::invoice_client::InvoiceClient,
-  pricing::pricing_client::PricingClient, procurement::procurement_client::ProcurementClient,
-  product::product_client::ProductClient, purchase::purchase_client::PurchaseClient,
-  source::source_client::SourceClient, stock::stock_client::StockClient,
-  upl::upl_client::UplClient, user::user_client::UserClient,
+  latex::latex_client::LatexClient, pricing::pricing_client::PricingClient,
+  procurement::procurement_client::ProcurementClient, product::product_client::ProductClient,
+  purchase::purchase_client::PurchaseClient, source::source_client::SourceClient,
+  stock::stock_client::StockClient, upl::upl_client::UplClient, user::user_client::UserClient,
 };
 use tonic::transport::Channel;
 
@@ -35,6 +35,7 @@ pub struct Services {
   pub auth: (),
   pub stock: StockClient<Channel>,
   pub purchase: PurchaseClient<Channel>,
+  pub latex: LatexClient<Channel>,
 }
 
 impl Services {
@@ -76,6 +77,9 @@ impl Services {
         .await
         .expect("Could not connect to stock service"),
       purchase: PurchaseClient::connect(service_address("SERVICE_ADDR_PURCHASE"))
+        .await
+        .expect("Could not connect to stock service"),
+      latex: LatexClient::connect(service_address("SERVICE_ADDR_LATEX"))
         .await
         .expect("Could not connect to stock service"),
     }

@@ -1,7 +1,10 @@
+use std::collections::HashMap;
+
 use crate::{prelude::*, services::Services};
 use gzlib::proto::{
   self,
   invoice::{ByIdRequest, DownloadRequest, DownloadResponse},
+  latex::Content,
 };
 use proto::invoice::invoice_client::*;
 use serde::{Deserialize, Serialize};
@@ -68,7 +71,7 @@ pub async fn get_invoice_data(
 }
 
 pub async fn download(uid: u32, mut services: Services, f: InvoiceDownloadForm) -> ApiResult {
-  let res: InvoicePdfForm = services
+  let pdf_base64: String = services
     .invoice
     .download(DownloadRequest {
       invoice_id: f.invoice_id,
@@ -76,7 +79,56 @@ pub async fn download(uid: u32, mut services: Services, f: InvoiceDownloadForm) 
     .await
     .map_err(|e| ApiError::from(e))?
     .into_inner()
-    .into();
+    .pdf_base64;
+
+  let template = r#"
+    \documentclass{standalone}
+    \usepackage{graphicx}
+    \usepackage{tabto}
+    \usepackage[utf8]{inputenc}
+    \usepackage[T1]{fontenc}
+    \usepackage{pdfpages}
+    
+    \begin{document}
+      
+      \begin{minipage}[left]{7cm}
+        \centering
+          \vspace{0.3cm}
+          \includegraphics[width=50px]{icon.jpg} \\
+          \Huge{\textbf{GardenZilla}} \\
+          \vspace{0.2cm}
+          \normalsize{\textmd{Kert és Otthon}}\\
+          \vspace{0cm}
+          
+          \hspace*{-0.5cm}\includegraphics[]{invoice.pdf}
+      \end{minipage}
+      
+      
+    \end{document}"#;
+
+  let icon_bytes = include_bytes!("../../static/icon.jpg");
+
+  let invoice_bytes = base64::decode(pdf_base64).expect("Error while decoding B64 document");
+
+  // Call latex service
+  let result = services
+    .latex
+    .process(Content {
+      main_latex_file: template.as_bytes().to_owned(),
+      attachments: {
+        let mut files: HashMap<String, Vec<u8>> = HashMap::new();
+        files.insert("icon.jpg".to_string(), icon_bytes.to_vec());
+        files.insert("invoice.pdf".to_string(), invoice_bytes);
+        files
+      },
+    })
+    .await
+    .map_err(|e| ApiError::bad_request("Hiba a latex szerviztől"))?
+    .into_inner();
+
+  let res: InvoicePdfForm = InvoicePdfForm {
+    pdf_base64: base64::encode(result.content),
+  };
 
   Ok(reply::json(&res))
 }
