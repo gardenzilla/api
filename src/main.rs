@@ -4,6 +4,7 @@ mod error;
 mod handler;
 mod login;
 mod prelude;
+mod receipt;
 mod routes;
 mod services;
 // use error::*;

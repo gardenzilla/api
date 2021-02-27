@@ -1,5 +1,6 @@
 pub mod cart;
 pub mod cash;
+pub mod commitment;
 pub mod customer;
 pub mod invoice;
 pub mod login;

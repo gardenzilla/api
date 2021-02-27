@@ -19,6 +19,8 @@ rustc-serialize = "0.3"
 serde = {version = "1.0", features = ["derive"]}
 serde_derive = "1.0"
 serde_json = "1.0"
+thousands = "0.2.0"
+tinytemplate = "*"
 tokio = {version = "0.2", features = ["full"]}
 tonic = "0.3"
 warp = "0.2.5"

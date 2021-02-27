@@ -1,17 +1,21 @@
+use std::{collections::HashMap, convert::TryInto};
+
 use crate::{prelude::*, services::Services};
 use chrono::{DateTime, Utc};
 use gzlib::proto::{
   self,
+  commitment::PurchaseInfo,
   invoice::{
     invoice_form::{Customer, Item, PaymentKind},
     InvoiceForm,
   },
-  purchase::{purchase_object::ItemKind, PurchaseInfoObject, PurchaseObject},
+  latex::Content,
+  purchase::{purchase_object::ItemKind, PurchaseByIdRequest, PurchaseInfoObject, PurchaseObject},
 };
 use serde::{Deserialize, Serialize};
 use warp::reply;
 
-use super::cart::{LoyaltyTransaction, PaymentForm, PaymentKindForm, UplInfoForm};
+use super::cart::{PaymentForm, PaymentKindForm, UplInfoForm};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PurchaseInfoForm {
@@ -87,16 +91,23 @@ pub enum ItemKindForm {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ItemForm {
-  kind: ItemKindForm,
-  product_id: u32,
-  name: String,
-  piece: u32,
-  retail_price_net: u32,
-  vat: String,
-  retail_price_gross: u32,
-  total_retail_price_net: u32,
-  total_retail_price_gross: u32,
-  upl_ids: Vec<String>,
+  pub kind: ItemKindForm,
+  pub product_id: u32,
+  pub name: String,
+  pub piece: u32,
+  pub retail_price_net: u32,
+  pub vat: String,
+  pub retail_price_gross: u32,
+  pub total_retail_price_net: u32,
+  pub total_retail_price_gross: u32,
+  pub upl_ids: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct LoyaltyTransaction {
+  pub loyalty_account_id: String,
+  pub transaction_id: String,
+  pub burned_points: i32,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -287,6 +298,73 @@ impl From<PurchaseForm> for InvoiceForm {
   }
 }
 
+impl From<PurchaseForm> for PurchaseInfoForm {
+  fn from(f: PurchaseForm) -> Self {
+    Self {
+      purchase_id: f.purchase_id,
+      customer: f.customer,
+      upl_count: f.upl_info_objects.len() as u32,
+      total_net_price: f.total_net_price,
+      total_vat: f.total_vat,
+      total_gross_price: f.total_gross_price,
+      balance: f.payment_balance,
+      payable: f.payable,
+      document_invoice: f.need_invoice,
+      invoice_id: f.invoice_id,
+      date_completion: f.date_completion,
+      payment_duedate: f.payment_duedate.clone(),
+      payment_expired: DateTime::parse_from_rfc3339(&f.payment_duedate).unwrap() > Utc::now(),
+      profit_net: f.profit_net,
+      restored: f.restored,
+      created_by: f.created_by,
+      created_at: f.created_at,
+    }
+  }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PurchaseIdForm {
+  purchase_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PdfBase64Form {
+  pdf_base64: String,
+}
+
+pub async fn purchase_info_get_by_id(
+  _uid: u32,
+  mut services: Services,
+  f: PurchaseIdForm,
+) -> ApiResult {
+  let res: PurchaseForm = services
+    .purchase
+    .purchase_get_by_id(PurchaseByIdRequest {
+      purchase_id: f.purchase_id,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
+  let info: PurchaseInfoForm = res.into();
+  Ok(reply::json(&info))
+}
+
+pub async fn purchase_get_by_id(
+  purchase_id: String,
+  _uid: u32,
+  mut services: Services,
+) -> ApiResult {
+  let res: PurchaseForm = services
+    .purchase
+    .purchase_get_by_id(PurchaseByIdRequest { purchase_id })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
+  Ok(reply::json(&res))
+}
+
 pub async fn purchase_get_all(_uid: u32, mut services: Services) -> ApiResult {
   let res: Vec<String> = services
     .purchase
@@ -311,4 +389,69 @@ pub async fn get_bulk(_uid: u32, mut services: Services, purchase_ids: Vec<Strin
     result.push(pinfo.into());
   }
   Ok(reply::json(&result))
+}
+
+pub async fn get_receipt(_uid: u32, mut services: Services, f: PurchaseIdForm) -> ApiResult {
+  let res: PurchaseForm = services
+    .purchase
+    .purchase_get_by_id(PurchaseByIdRequest {
+      purchase_id: f.purchase_id,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .into();
+
+  let receipt = crate::receipt::Receipt::new(
+    res.purchase_id,
+    res
+      .items
+      .iter()
+      .map(|i| crate::receipt::Item {
+        sku: "-".to_string(),
+        name: i.name.clone(),
+        piece: i.piece,
+        gross_price_total: i.total_retail_price_gross,
+      })
+      .collect(),
+    res.total_gross_price,
+    res.commitment_discount_amount_gross,
+    res.commitment_discount_percentage,
+    res.loyalty_account_id.len() > 0,
+    res.loyalty_card_id,
+    res.burned_loyalty_points,
+    0,
+    res.loyalty_level,
+    0,
+    0,
+    res.total_gross_price,
+    DateTime::parse_from_rfc3339(&res.created_at)
+      .unwrap()
+      .with_timezone(&Utc),
+  );
+
+  let template = receipt.to_latex();
+
+  let icon_bytes = include_bytes!("../../static/icon.jpg");
+
+  // Call latex service
+  let result = services
+    .latex
+    .process(Content {
+      main_latex_file: template.as_bytes().to_owned(),
+      attachments: {
+        let mut files: HashMap<String, Vec<u8>> = HashMap::new();
+        files.insert("logo.jpg".to_string(), icon_bytes.to_vec());
+        files
+      },
+    })
+    .await
+    .map_err(|e| ApiError::bad_request("Hiba a latex szerviztől"))?
+    .into_inner();
+
+  let res: PdfBase64Form = PdfBase64Form {
+    pdf_base64: base64::encode(result.content),
+  };
+
+  Ok(reply::json(&res))
 }

@@ -625,14 +625,16 @@ pub async fn cart_add_upl(uid: u32, mut services: Services, f: CartAddUplForm) -
       upl_obj::Kind::Sku(_) => sku.display_name,
       upl_obj::Kind::BulkSku(_) => sku.display_name,
       upl_obj::Kind::OpenedSku(opened_sku) => format!(
-        "{}, {} {}",
+        "{} {}, {} {}",
         product.name,
+        sku.subname,
         opened_sku.amount,
         upl_obj.product_unit.clone()
       ),
       upl_obj::Kind::DerivedProduct(derived_product) => format!(
-        "{}, {} {}",
+        "{} {}, {} {}",
         product.name,
+        sku.subname,
         derived_product.amount,
         upl_obj.product_unit.clone()
       ),
