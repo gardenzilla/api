@@ -11,7 +11,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use gzlib::proto::{
   self,
   cash::NewTransaction,
-  commitment::CustomerRequest,
+  commitment::{AddPurchaseRequest, CustomerRequest},
   invoice::{
     invoice_form::{Customer, PaymentKind},
     InvoiceForm,
@@ -940,7 +940,7 @@ pub async fn cart_close(uid: u32, mut services: Services, f: CartCloseForm) -> A
     let purchase: PurchaseForm = services
       .purchase
       .purchase_get_by_id(PurchaseByIdRequest {
-        purchase_id: cart_closed.id,
+        purchase_id: cart_closed.id.clone(),
       })
       .await
       .map_err(|e| ApiError::from(e))?
@@ -962,11 +962,28 @@ pub async fn cart_close(uid: u32, mut services: Services, f: CartCloseForm) -> A
     services
       .purchase
       .purchase_set_invoice_id(PurchaseSetInvoiceIdRequest {
-        purchase_id: purchase.purchase_id,
+        purchase_id: purchase.purchase_id.clone(),
         invoice_id: invoice_data.id,
       })
       .await
       .map_err(|e| ApiError::from(e))?;
+  }
+
+  // If it has commitment, add purchase to commitment
+  if let Some(customer) = cart_closed.customer {
+    if cart_closed.commitment_id.len() > 0 {
+      let _ = services
+        .commitment
+        .add_purchase(AddPurchaseRequest {
+          customer_id: customer.id,
+          commitment_id: cart_closed.commitment_id.clone(),
+          purchase_id: cart_closed.id.clone(),
+          total_net: cart_closed.total_net,
+          total_gross: cart_closed.total_gross,
+          applied_discount: cart_closed.commitment_discount_percentage,
+        })
+        .await;
+    }
   }
 
   // Return nothing if success
