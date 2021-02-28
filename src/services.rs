@@ -1,9 +1,10 @@
 use std::env;
 
 use gzlib::proto::{
-  cash::cash_client::CashClient, customer::customer_client::CustomerClient,
-  email::email_client::EmailClient, invoice::invoice_client::InvoiceClient,
-  latex::latex_client::LatexClient, pricing::pricing_client::PricingClient,
+  cash::cash_client::CashClient, commitment::commitment_client::CommitmentClient,
+  customer::customer_client::CustomerClient, email::email_client::EmailClient,
+  invoice::invoice_client::InvoiceClient, latex::latex_client::LatexClient,
+  loyalty::loyalty_client::LoyaltyClient, pricing::pricing_client::PricingClient,
   procurement::procurement_client::ProcurementClient, product::product_client::ProductClient,
   purchase::purchase_client::PurchaseClient, source::source_client::SourceClient,
   stock::stock_client::StockClient, upl::upl_client::UplClient, user::user_client::UserClient,
@@ -36,6 +37,8 @@ pub struct Services {
   pub stock: StockClient<Channel>,
   pub purchase: PurchaseClient<Channel>,
   pub latex: LatexClient<Channel>,
+  pub commitment: CommitmentClient<Channel>,
+  pub loyalty: LoyaltyClient<Channel>,
 }
 
 impl Services {
@@ -78,10 +81,16 @@ impl Services {
         .expect("Could not connect to stock service"),
       purchase: PurchaseClient::connect(service_address("SERVICE_ADDR_PURCHASE"))
         .await
-        .expect("Could not connect to stock service"),
+        .expect("Could not connect to purchase service"),
       latex: LatexClient::connect(service_address("SERVICE_ADDR_LATEX"))
         .await
-        .expect("Could not connect to stock service"),
+        .expect("Could not connect to latex service"),
+      commitment: CommitmentClient::connect(service_address("SERVICE_ADDR_COMMITMENT"))
+        .await
+        .expect("Could not connect to commitment service"),
+      loyalty: LoyaltyClient::connect(service_address("SERVICE_ADDR_LOYALTY"))
+        .await
+        .expect("Could not connect to loyalty service"),
     }
   }
 }

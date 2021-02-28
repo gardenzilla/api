@@ -11,14 +11,16 @@ use chrono::{DateTime, NaiveDate, Utc};
 use gzlib::proto::{
   self,
   cash::NewTransaction,
+  commitment::CustomerRequest,
   invoice::{
     invoice_form::{Customer, PaymentKind},
     InvoiceForm,
   },
   product::{GetProductRequest, GetSkuRequest, SkuObj},
   purchase::{
-    upl_info_object::UplKindOpenedSku, CartInfoObject, CartObject, CartSetDocumentRequest,
-    DocumentKind, PurchaseByIdRequest, PurchaseSetInvoiceIdRequest,
+    upl_info_object::UplKindOpenedSku, AddCommitmentRequest, CartInfoObject, CartObject,
+    CartSetDocumentRequest, DocumentKind, PurchaseByIdRequest, PurchaseSetInvoiceIdRequest,
+    RemoveCommitmentRequest,
   },
   upl::upl_obj,
 };
@@ -440,6 +442,39 @@ pub async fn cart_add_customer(
     .map_err(|e| ApiError::from(e))?
     .into_inner();
 
+  //
+  // Add commitment if has any
+  //
+  // Query commitment (if has any)
+  if let Ok(c) = services
+    .commitment
+    .has_active_commitment(CustomerRequest {
+      customer_id: customer.id,
+    })
+    .await
+  {
+    let commitment = c.into_inner();
+    // If has active commitment
+    if commitment.has_active_commitment {
+      if let Some(ac) = commitment.active_commitment {
+        let _ = services
+          .purchase
+          .cart_commitment_add(AddCommitmentRequest {
+            cart_id: f.cart_id.clone(),
+            commitment_id: ac.commitment_id,
+            discount_percentage: ac.discount_percentage,
+          })
+          .await
+          .map_err(|e| ApiError::from(e))?
+          .into_inner();
+      }
+    }
+  }
+  //
+  // Commitment END
+  //
+
+  // Add customer
   let res: CartForm = services
     .purchase
     .cart_add_customer(proto::purchase::CartAddCustomerReuqest {
@@ -463,6 +498,31 @@ pub async fn cart_remove_customer(
   mut services: Services,
   f: CartRemoveCustomerForm,
 ) -> ApiResult {
+  // First query cart
+  let cart: CartForm = services
+    .purchase
+    .cart_get_by_id(CartByIdRequest {
+      cart_id: f.cart_id.clone(),
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+
+  // Check if we have commitment
+  // If we have, remove it
+  if cart.commitment_id.len() > 0 {
+    // TODO! Manage error?
+    let _ = services
+      .purchase
+      .cart_commitment_remove(RemoveCommitmentRequest {
+        cart_id: cart.id,
+        commitment_id: cart.commitment_id,
+      })
+      .await;
+  }
+
+  // Finally remove customer
   let res: CartForm = services
     .purchase
     .cart_remove_customer(proto::purchase::CartRemoveCustomerRequest { cart_id: f.cart_id })
