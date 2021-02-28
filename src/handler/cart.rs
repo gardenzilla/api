@@ -16,11 +16,12 @@ use gzlib::proto::{
     invoice_form::{Customer, PaymentKind},
     InvoiceForm,
   },
+  loyalty::CardRequest,
   product::{GetProductRequest, GetSkuRequest, SkuObj},
   purchase::{
     upl_info_object::UplKindOpenedSku, AddCommitmentRequest, CartInfoObject, CartObject,
-    CartSetDocumentRequest, DocumentKind, PurchaseByIdRequest, PurchaseSetInvoiceIdRequest,
-    RemoveCommitmentRequest,
+    CartSetDocumentRequest, DocumentKind, LoyaltyCardAddRequest, PurchaseByIdRequest,
+    PurchaseSetInvoiceIdRequest, RemoveCommitmentRequest,
   },
   upl::upl_obj,
 };
@@ -348,6 +349,12 @@ pub struct CartAddUplForm {
 pub struct CartRemoveUplForm {
   cart_id: String,
   upl_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CartAddLoyaltyCard {
+  cart_id: String,
+  loyalty_card_id: String,
 }
 
 enum UKind {
@@ -1004,6 +1011,38 @@ pub async fn cart_set_need_invoice(
         true => DocumentKind::Invoice,
         false => DocumentKind::Receipt,
       } as i32,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+
+  Ok(reply::json(&res))
+}
+
+pub async fn cart_add_loyalty_card(
+  uid: u32,
+  mut services: Services,
+  f: CartAddLoyaltyCard,
+) -> ApiResult {
+  // Query loyalty card
+  let loyalty_account = services
+    .loyalty
+    .get_account_by_card_id(CardRequest {
+      card_id: f.loyalty_card_id.clone(),
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+
+  // Add loyalty card to cart
+  let res: CartForm = services
+    .purchase
+    .cart_loyalty_card_add(LoyaltyCardAddRequest {
+      cart_id: f.cart_id,
+      account_id: loyalty_account.account_id,
+      card_id: f.loyalty_card_id,
+      loyalty_level: loyalty_account.loyalty_level,
     })
     .await
     .map_err(|e| ApiError::from(e))?

@@ -102,6 +102,13 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and(warp::body::json())
     .and_then(handler::cart::cart_set_need_invoice);
 
+  let add_loyalty_card = warp::path!("add_loyalty_card")
+    .and(warp::put())
+    .and(auth())
+    .and(add(services.clone()))
+    .and(warp::body::json())
+    .and_then(handler::cart::cart_add_loyalty_card);
+
   let close = warp::path!("close")
     .and(warp::put())
     .and(auth())
@@ -124,6 +131,7 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
       .or(set_payment)
       .or(add_payment)
       .or(set_document)
+      .or(add_loyalty_card)
       .or(close)))
     .boxed()
 }
