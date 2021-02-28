@@ -119,40 +119,43 @@ pub async fn new_account(uid: u32, mut services: Services, f: NewAccountForm) ->
 }
 
 pub async fn get_by_customer_id(customer_id: u32, uid: u32, mut services: Services) -> ApiResult {
-  let res: AccountForm = services
+  let res: Option<AccountForm> = match services
     .loyalty
     .get_account_by_customer_id(CustomerRequest { customer_id })
     .await
-    .map_err(|e| ApiError::from(e))?
-    .into_inner()
-    .into();
+  {
+    Ok(r) => Some(r.into_inner().into()),
+    Err(_) => None,
+  };
 
   Ok(reply::json(&res))
 }
 
 pub async fn get_by_card_id(card_id: String, uid: u32, mut services: Services) -> ApiResult {
-  let res: AccountForm = services
+  let res: Option<AccountForm> = match services
     .loyalty
     .get_account_by_card_id(CardRequest { card_id })
     .await
-    .map_err(|e| ApiError::from(e))?
-    .into_inner()
-    .into();
+  {
+    Ok(r) => Some(r.into_inner().into()),
+    Err(_) => None,
+  };
 
   Ok(reply::json(&res))
 }
 
 pub async fn get_by_query(uid: u32, mut services: Services, f: QueryForm) -> ApiResult {
-  let res: AccountForm = services
+  let res: Option<AccountForm> = match services
     .loyalty
     .get_account_by_query(QueryRequest {
       customer_id: f.customer_id,
       birthdate: f.birthdate,
     })
     .await
-    .map_err(|e| ApiError::from(e))?
-    .into_inner()
-    .into();
+  {
+    Ok(r) => Some(r.into_inner().into()),
+    Err(_) => None,
+  };
 
   Ok(reply::json(&res))
 }
