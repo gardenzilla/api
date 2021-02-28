@@ -4,6 +4,7 @@ pub mod commitment;
 pub mod customer;
 pub mod invoice;
 pub mod login;
+pub mod loyalty;
 pub mod pricing;
 pub mod procurement;
 pub mod product;
