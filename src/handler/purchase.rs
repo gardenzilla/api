@@ -111,15 +111,24 @@ pub struct LoyaltyTransaction {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct LoyaltyCard {
+  account_id: String,
+  card_id: String,
+  loyalty_level: String,
+  balance_opening: i32,
+  burned_points: i32,
+  earned_points: i32,
+  balance_closing: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PurchaseForm {
   pub purchase_id: String,
   pub customer: Option<CustomerForm>,
   pub commitment_id: String,
   pub commitment_discount_percentage: u32,
   pub commitment_discount_amount_gross: u32,
-  pub loyalty_account_id: String,
-  pub loyalty_card_id: String,
-  pub loyalty_level: String,
+  pub loyalty_card: Option<LoyaltyCard>,
   pub burned_loyalty_points: u32,
   pub items: Vec<ItemForm>,
   pub upl_info_objects: Vec<UplInfoForm>,
@@ -163,9 +172,18 @@ impl From<PurchaseObject> for PurchaseForm {
       commitment_id: f.commitment_id,
       commitment_discount_percentage: f.commitment_discount_percentage,
       commitment_discount_amount_gross: f.commitment_discount_amount_gross,
-      loyalty_account_id: f.loyalty_account_id,
-      loyalty_card_id: f.loyalty_card_id,
-      loyalty_level: f.loyalty_level,
+      loyalty_card: match f.loyalty_card {
+        Some(lc) => Some(LoyaltyCard {
+          account_id: lc.account_id,
+          card_id: lc.card_id,
+          loyalty_level: lc.loyalty_level,
+          balance_opening: lc.balance_opening,
+          burned_points: lc.burned_points,
+          earned_points: lc.earned_points,
+          balance_closing: lc.balance_closing,
+        }),
+        None => None,
+      },
       burned_loyalty_points: f.burned_loyalty_points,
       items: f
         .items
@@ -238,6 +256,64 @@ impl From<PurchaseObject> for PurchaseForm {
 
 impl From<PurchaseForm> for InvoiceForm {
   fn from(f: PurchaseForm) -> Self {
+    let mut items: Vec<Item> = f
+      .items
+      .iter()
+      .map(|i| Item {
+        name: i.name.clone(),
+        quantity: i.piece as i32,
+        unit: "db".to_string(),
+        price_unit_net: i.retail_price_net as i32,
+        vat: i.vat.clone(),
+        total_price_net: i.total_retail_price_net as i32,
+        total_price_vat: i.total_retail_price_gross as i32 - i.total_retail_price_net as i32, // TODO! Fix it
+        total_price_gross: i.total_retail_price_gross as i32,
+        comment: "".to_string(),
+      })
+      .collect();
+
+    // Insert commitment discount if have one
+    if f.commitment_id.len() > 0 {
+      let gross = (f.commitment_discount_amount_gross as i32) * -1;
+      let net = (gross as f32 / 1.27).round() as i32;
+      let vat = gross - net;
+      items.push(Item {
+        name: format!("Egyedi kedvezmény ({}%)", f.commitment_discount_percentage),
+        quantity: 1,
+        unit: "db".to_string(),
+        price_unit_net: net,
+        vat: "27".to_string(),
+        total_price_net: net,
+        total_price_vat: vat,
+        total_price_gross: gross,
+        comment: format!("Commitment azonosító: {}", f.commitment_id.clone()),
+      });
+    }
+
+    // Insert burned points discount if have one
+    if let Some(loyalty) = f.loyalty_card {
+      // Only if we burned points
+      if loyalty.burned_points != 0 {
+        let gross = (loyalty.burned_points as i32) * -1;
+        let net = (gross as f32 / 1.27).round() as i32;
+        let vat = gross - net;
+        items.push(Item {
+          name: "Törzsvásárlói kedvezmény".to_string(),
+          quantity: 1,
+          unit: "db".to_string(),
+          price_unit_net: net,
+          vat: "27".to_string(),
+          total_price_net: net,
+          total_price_vat: vat,
+          total_price_gross: gross,
+          comment: format!(
+            "Törzsvásárlói fiók azonosító: {}",
+            loyalty.account_id.clone()
+          ),
+        });
+      }
+    }
+
     Self {
       purchase_id: f.purchase_id,
       customer: Some(Customer {
@@ -267,21 +343,7 @@ impl From<PurchaseForm> for InvoiceForm {
         },
         email: "".to_owned(),
       }),
-      items: f
-        .items
-        .iter()
-        .map(|i| Item {
-          name: i.name.clone(),
-          quantity: i.piece as i32,
-          unit: "db".to_string(),
-          price_unit_net: i.retail_price_net as i32,
-          vat: i.vat.clone(),
-          total_price_net: i.total_retail_price_net as i32,
-          total_price_vat: i.total_retail_price_gross as i32 - i.total_retail_price_net as i32, // TODO! Fix it
-          total_price_gross: i.total_retail_price_gross as i32,
-          comment: "".to_string(),
-        })
-        .collect(),
+      items,
       payment_kind: match f.payment_kind {
         PaymentKindForm::Cash => PaymentKind::Cash,
         PaymentKindForm::Card => PaymentKind::Card,
@@ -414,17 +476,35 @@ pub async fn get_receipt(_uid: u32, mut services: Services, f: PurchaseIdForm) -
         gross_price_total: i.total_retail_price_gross,
       })
       .collect(),
-    res.total_gross_price,
-    res.commitment_discount_amount_gross,
+    res.total_gross_price as i32,
+    res.commitment_discount_amount_gross as i32,
     res.commitment_discount_percentage,
-    res.loyalty_account_id.len() > 0,
-    res.loyalty_card_id,
-    res.burned_loyalty_points,
-    0,
-    res.loyalty_level,
-    0,
-    0,
-    res.total_gross_price,
+    res.loyalty_card.is_some(),
+    match res.loyalty_card.clone() {
+      Some(lc) => lc.card_id,
+      None => "".to_string(),
+    },
+    match res.loyalty_card.clone() {
+      Some(lc) => lc.burned_points,
+      None => 0,
+    },
+    match res.loyalty_card.clone() {
+      Some(lc) => lc.earned_points,
+      None => 0,
+    },
+    match res.loyalty_card.clone() {
+      Some(lc) => lc.loyalty_level,
+      None => "".to_string(),
+    },
+    match res.loyalty_card.clone() {
+      Some(lc) => lc.balance_opening,
+      None => 0,
+    },
+    match res.loyalty_card.clone() {
+      Some(lc) => lc.balance_closing,
+      None => 0,
+    },
+    res.total_gross_price as i32,
     DateTime::parse_from_rfc3339(&res.created_at)
       .unwrap()
       .with_timezone(&Utc),

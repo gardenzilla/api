@@ -7,17 +7,17 @@ use tinytemplate::TinyTemplate;
 pub struct Receipt {
   purchase_id: String,         // Purchase ID
   items: Vec<Item>,            // Cart items
-  gross: u32,                  // Cart total value without any discounts
-  discount_value: u32,         // Given discount value
+  gross: i32,                  // Cart total value without any discounts
+  discount_value: i32,         // Given discount value
   discount_percentage: u32,    // Discount value
   has_loyalty_card: bool,      //
   loyalty_card_id: String,     // Loyalty card ID
-  loyalty_burned_points: u32,  // Burned loyalty points
-  loyalty_earned_points: u32,  // Loyalty earned points
+  loyalty_burned_points: i32,  // Burned loyalty points
+  loyalty_earned_points: i32,  // Loyalty earned points
   loyalty_level: String,       // Loyalty level (percentage)
-  loyalty_balance_before: u32, //
-  loyalty_balance_after: u32,  //
-  total_gross: u32,            // Total gross after applying discount and burned points
+  loyalty_balance_before: i32, //
+  loyalty_balance_after: i32,  //
+  total_gross: i32,            // Total gross after applying discount and burned points
   date: String,                //
 }
 
@@ -25,17 +25,17 @@ impl Receipt {
   pub fn new(
     purchase_id: String,
     items: Vec<Item>,
-    gross: u32,
-    discount_value: u32,
+    gross: i32,
+    discount_value: i32,
     discount_percentage: u32,
     has_loyalty_card: bool,
     loyalty_card_id: String,
-    loyalty_burned_points: u32,
-    loyalty_earned_points: u32,
+    loyalty_burned_points: i32,
+    loyalty_earned_points: i32,
     loyalty_level: String,
-    loyalty_balance_before: u32,
-    loyalty_balance_after: u32,
-    total_gross: u32,
+    loyalty_balance_before: i32,
+    loyalty_balance_after: i32,
+    total_gross: i32,
     date: DateTime<Utc>,
   ) -> Self {
     Self {

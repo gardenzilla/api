@@ -16,12 +16,13 @@ use gzlib::proto::{
     invoice_form::{Customer, PaymentKind},
     InvoiceForm,
   },
-  loyalty::CardRequest,
+  loyalty::{loyalty_client::LoyaltyClient, BurnRequest, CardRequest, ClosePurchaseRequest},
   product::{GetProductRequest, GetSkuRequest, SkuObj},
   purchase::{
-    upl_info_object::UplKindOpenedSku, AddCommitmentRequest, CartInfoObject, CartObject,
-    CartSetDocumentRequest, DocumentKind, LoyaltyCardAddRequest, PurchaseByIdRequest,
-    PurchaseSetInvoiceIdRequest, RemoveCommitmentRequest,
+    upl_info_object::UplKindOpenedSku, AddCommitmentRequest, BurnPointsRequest, CartInfoObject,
+    CartObject, CartSetDocumentRequest, DocumentKind, LoyaltyCardAddRequest,
+    LoyaltyCardRemoveRequest, PurchaseByIdRequest, PurchaseSetInvoiceIdRequest,
+    RemoveCommitmentRequest,
   },
   upl::upl_obj,
 };
@@ -134,15 +135,20 @@ pub struct LoyaltyTransaction {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct LoyaltyCard {
+  account_id: String,
+  card_id: String,
+  loyalty_level: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CartForm {
   ancestor: String,
   id: String,
   customer: Option<CustomerForm>,
   commitment_id: String,
   commitment_discount_percentage: u32,
-  loyalty_card_id: String,
-  loyalty_account_id: String,
-  loyalty_level: String,
+  loyalty_card: Option<LoyaltyCard>,
   shopping_list: Vec<ItemForm>,
   upls_sku: Vec<UplInfoForm>,
   upls_unique: Vec<UplInfoForm>,
@@ -256,9 +262,14 @@ impl TryFrom<CartObject> for CartForm {
       created_at: f.created_at,
       commitment_id: f.commitment_id,
       commitment_discount_percentage: f.commitment_discount_percentage,
-      loyalty_card_id: f.loyalty_card_id,
-      loyalty_account_id: f.loyalty_account_id,
-      loyalty_level: f.loyalty_level,
+      loyalty_card: match f.loyalty_card {
+        Some(lc) => Some(LoyaltyCard {
+          account_id: lc.account_id,
+          card_id: lc.card_id,
+          loyalty_level: lc.loyalty_level,
+        }),
+        None => None,
+      },
       commitment_discount_amount_gross: f.commitment_discount_amount_gross,
       burned_points: f
         .burned_points
@@ -357,6 +368,11 @@ pub struct CartAddLoyaltyCard {
   loyalty_card_id: String,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CartRemoveLoyaltyCard {
+  cart_id: String,
+}
+
 enum UKind {
   Sku {
     sku: u32,
@@ -379,6 +395,12 @@ pub struct CartAddPaymentForm {
   cart_id: String,
   kind: String,
   amount: i32,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CartBurnLoyaltyPoints {
+  cart_id: String,
+  points_to_burn: i32,
 }
 
 pub async fn new_cart(uid: u32, mut services: Services, f: NewCartForm) -> ApiResult {
@@ -993,6 +1015,31 @@ pub async fn cart_close(uid: u32, mut services: Services, f: CartCloseForm) -> A
     }
   }
 
+  // If it has loyalty card, add purchase to loyalty card
+  if let Some(lc) = cart_closed.loyalty_card {
+    match services
+      .loyalty
+      .close_purchase(ClosePurchaseRequest {
+        account_id: lc.account_id,
+        purchase_id: cart_closed.id.clone(),
+        total_gross: cart_closed.total_gross,
+        created_by: cart_closed.created_by,
+      })
+      .await
+    {
+      Ok(s) => {
+        let summary = s.into_inner();
+        // Set loyalty summary to purchase
+        let _ = services // TODO! Error handling?
+          .purchase
+          .purchase_set_loyalty_summary(summary)
+          .await;
+      }
+      // TODO! Error handling?
+      Err(_) => (),
+    }
+  }
+
   // Return nothing if success
   Ok(reply::json(&""))
 }
@@ -1043,6 +1090,90 @@ pub async fn cart_add_loyalty_card(
       account_id: loyalty_account.account_id,
       card_id: f.loyalty_card_id,
       loyalty_level: loyalty_account.loyalty_level,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+
+  Ok(reply::json(&res))
+}
+
+pub async fn cart_remove_loyalty_card(
+  uid: u32,
+  mut services: Services,
+  f: CartRemoveLoyaltyCard,
+) -> ApiResult {
+  // Remove loyalty card to cart
+  let res: CartForm = services
+    .purchase
+    .cart_loyalty_card_remove(LoyaltyCardRemoveRequest { cart_id: f.cart_id })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+
+  Ok(reply::json(&res))
+}
+
+pub async fn cart_burn_loyalty_points(
+  uid: u32,
+  mut services: Services,
+  f: CartBurnLoyaltyPoints,
+) -> ApiResult {
+  // Query cart and loyalty data
+  let cart: CartForm = services
+    .purchase
+    .cart_get_by_id(proto::purchase::CartByIdRequest {
+      cart_id: f.cart_id.clone(),
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+
+  // Check if cart has loyalty card attached
+  let loyalty_card_id = match cart.loyalty_card {
+    Some(lc) => lc.card_id,
+    None => {
+      // If no card, return error
+      return Err(ApiError::bad_request("A kosárhoz nincs törzsvásárlói kártya rendelve!").into());
+    }
+  };
+
+  // Query loyalty card
+  let loyalty_account = match services
+    .loyalty
+    .get_account_by_card_id(CardRequest {
+      card_id: loyalty_card_id,
+    })
+    .await
+  {
+    Ok(la) => la.into_inner(),
+    Err(_) => return Err(ApiError::bad_request("A megadott fiók nem található").into()),
+  };
+
+  // Try burn points
+  let transaction = services
+    .loyalty
+    .burn_points(BurnRequest {
+      account_id: loyalty_account.account_id.clone(),
+      purchase_id: f.cart_id.clone(),
+      points_to_burn: f.points_to_burn,
+      created_by: uid,
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner();
+
+  // Add points to cart
+  let res: CartForm = services
+    .purchase
+    .cart_burn_points(BurnPointsRequest {
+      cart_id: f.cart_id.clone(),
+      loyalty_account_id: loyalty_account.account_id.clone(),
+      transaction_id: transaction.transaction_id,
+      points_to_burn: transaction.amount,
     })
     .await
     .map_err(|e| ApiError::from(e))?
