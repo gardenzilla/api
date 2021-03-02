@@ -291,27 +291,22 @@ impl From<PurchaseForm> for InvoiceForm {
     }
 
     // Insert burned points discount if have one
-    if let Some(loyalty) = f.loyalty_card {
-      // Only if we burned points
-      if loyalty.burned_points != 0 {
-        let gross = (loyalty.burned_points as i32) * -1;
-        let net = (gross as f32 / 1.27).round() as i32;
-        let vat = gross - net;
-        items.push(Item {
-          name: "Törzsvásárlói kedvezmény".to_string(),
-          quantity: 1,
-          unit: "db".to_string(),
-          price_unit_net: net,
-          vat: "27".to_string(),
-          total_price_net: net,
-          total_price_vat: vat,
-          total_price_gross: gross,
-          comment: format!(
-            "Törzsvásárlói fiók azonosító: {}",
-            loyalty.account_id.clone()
-          ),
-        });
-      }
+    // Only if we burned points
+    if f.burned_loyalty_points > 0 {
+      let gross = (f.burned_loyalty_points as i32) * -1;
+      let net = (gross as f32 / 1.27).round() as i32;
+      let vat = gross - net;
+      items.push(Item {
+        name: "Törzsvásárlói kedvezmény".to_string(),
+        quantity: 1,
+        unit: "db".to_string(),
+        price_unit_net: net,
+        vat: "27".to_string(),
+        total_price_net: net,
+        total_price_vat: vat,
+        total_price_gross: gross,
+        comment: "".to_string(),
+      });
     }
 
     Self {

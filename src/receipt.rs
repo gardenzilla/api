@@ -1,7 +1,7 @@
 use chrono::prelude::*;
 use serde::Serialize;
 use thousands::Separable;
-use tinytemplate::TinyTemplate;
+use tinytemplate::{format_unescaped, TinyTemplate};
 
 #[derive(Serialize)]
 pub struct Receipt {
@@ -38,6 +38,22 @@ impl Receipt {
     total_gross: i32,
     date: DateTime<Utc>,
   ) -> Self {
+    let items = items
+      .into_iter()
+      .map(|mut i| {
+        i.name = i.name.replace("\\", "\\\\");
+        i.name = i.name.replace("&", "\\&");
+        i.name = i.name.replace("%", "\\%");
+        i.name = i.name.replace("$", "\\$");
+        i.name = i.name.replace("#", "\\#");
+        i.name = i.name.replace("_", "\\_");
+        i.name = i.name.replace("{", "\\{");
+        i.name = i.name.replace("}", "\\}");
+        i.name = i.name.replace("~", "\\~");
+        i.name = i.name.replace("^", "\\^");
+        i
+      })
+      .collect();
     Self {
       purchase_id,
       items,
@@ -157,6 +173,8 @@ impl Receipt {
     "#;
 
     let mut tt = TinyTemplate::new();
+    // Disable HTML escape
+    tt.set_default_formatter(&format_unescaped);
     tt.add_template("receipt", template).unwrap();
     tt.add_formatter("number", |i, o| match i.as_u64() {
       Some(n) => {
