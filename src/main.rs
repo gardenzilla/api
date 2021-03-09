@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
       .and(routes::get_all(services).await)
       .recover(handle_rejection),
   )
-  .bind_with_graceful_shutdown(([127, 0, 0, 1], 3030), async {
+  .bind_with_graceful_shutdown(([0, 0, 0, 0], 3030), async {
     rx.await.ok();
   });
 
