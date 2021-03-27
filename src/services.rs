@@ -1,13 +1,23 @@
 use std::env;
 
 use gzlib::proto::{
-  cash::cash_client::CashClient, commitment::commitment_client::CommitmentClient,
-  customer::customer_client::CustomerClient, email::email_client::EmailClient,
-  invoice::invoice_client::InvoiceClient, latex::latex_client::LatexClient,
-  loyalty::loyalty_client::LoyaltyClient, pricing::pricing_client::PricingClient,
-  procurement::procurement_client::ProcurementClient, product::product_client::ProductClient,
-  purchase::purchase_client::PurchaseClient, source::source_client::SourceClient,
-  stock::stock_client::StockClient, upl::upl_client::UplClient, user::user_client::UserClient,
+  cash::cash_client::CashClient,
+  commitment::commitment_client::CommitmentClient,
+  customer::customer_client::CustomerClient,
+  email::email_client::EmailClient,
+  invoice::invoice_client::InvoiceClient,
+  latex::latex_client::LatexClient,
+  loyalty::loyalty_client::LoyaltyClient,
+  pricing::pricing_client::PricingClient,
+  procurement::procurement_client::ProcurementClient,
+  product::product_client::ProductClient,
+  purchase::purchase_client::PurchaseClient,
+  sku_image::{sku_image_client::SkuImageClient, sku_image_server::SkuImage},
+  sku_image_processer::sku_image_processer_client::SkuImageProcesserClient,
+  source::source_client::SourceClient,
+  stock::stock_client::StockClient,
+  upl::upl_client::UplClient,
+  user::user_client::UserClient,
 };
 use tonic::transport::Channel;
 
@@ -39,6 +49,8 @@ pub struct Services {
   pub latex: LatexClient<Channel>,
   pub commitment: CommitmentClient<Channel>,
   pub loyalty: LoyaltyClient<Channel>,
+  pub sku_image: SkuImageClient<Channel>,
+  pub sku_img_processer: SkuImageProcesserClient<Channel>,
 }
 
 impl Services {
@@ -91,6 +103,14 @@ impl Services {
       loyalty: LoyaltyClient::connect(service_address("SERVICE_ADDR_LOYALTY"))
         .await
         .expect("Could not connect to loyalty service"),
+      sku_image: SkuImageClient::connect(service_address("SERVICE_ADDR_SKU_IMAGE"))
+        .await
+        .expect("Could not connect to sku image service"),
+      sku_img_processer: SkuImageProcesserClient::connect(service_address(
+        "SERVICE_ADDR_SKU_IMG_PROCESSER",
+      ))
+      .await
+      .expect("Could not connect to sku image processer service"),
     }
   }
 }
