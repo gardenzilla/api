@@ -27,8 +27,6 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::user::update_profile);
 
   warp::path!("profile" / ..)
-    .and(balanced_or_tree!(profile_new_password
-      .or(profile_get)
-      .or(profile_update)))
+    .and(combine!(profile_new_password, profile_get, profile_update))
     .boxed()
 }

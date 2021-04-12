@@ -61,13 +61,15 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::product::product_set_perishable);
 
   warp::path!("product" / ..)
-    .and(balanced_or_tree!(product_get_all
-      .or(product_new)
-      .or(product_get_by_id)
-      .or(product_get_bulk)
-      .or(product_update)
-      .or(product_find)
-      .or(product_set_discontinued)
-      .or(product_set_perishable)))
+    .and(combine!(
+      product_get_all,
+      product_new,
+      product_get_by_id,
+      product_get_bulk,
+      product_update,
+      product_find,
+      product_set_discontinued,
+      product_set_perishable
+    ))
     .boxed()
 }

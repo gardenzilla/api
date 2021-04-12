@@ -61,13 +61,15 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::product::sku_set_discontinued);
 
   warp::path!("sku" / ..)
-    .and(balanced_or_tree!(sku_get_all
-      .or(sku_new)
-      .or(sku_get_by_id)
-      .or(sku_get_bulk)
-      .or(sku_update)
-      .or(sku_find)
-      .or(sku_set_divide)
-      .or(sku_set_discontinued)))
+    .and(combine!(
+      sku_get_all,
+      sku_new,
+      sku_get_by_id,
+      sku_get_bulk,
+      sku_update,
+      sku_find,
+      sku_set_divide,
+      sku_set_discontinued
+    ))
     .boxed()
 }

@@ -54,11 +54,13 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::cash::get_by_date_range);
 
   warp::path!("cash" / ..)
-    .and(balanced_or_tree!(new_purchase
-      .or(new_general)
-      .or(get_by_id)
-      .or(get_bulk)
-      .or(get_balance)
-      .or(get_by_date_range)))
+    .and(combine!(
+      new_purchase,
+      new_general,
+      get_by_id,
+      get_bulk,
+      get_balance,
+      get_by_date_range
+    ))
     .boxed()
 }

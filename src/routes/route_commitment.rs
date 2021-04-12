@@ -26,6 +26,6 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::commitment::get_all);
 
   warp::path!("commitment" / ..)
-    .and(balanced_or_tree!(new_commitment.or(get_by_id).or(get_all)))
+    .and(combine!(new_commitment, get_by_id, get_all))
     .boxed()
 }

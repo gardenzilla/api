@@ -15,6 +15,6 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::login::reset_password);
 
   warp::path!("login" / ..)
-    .and(balanced_or_tree!(login_action.or(login_password_reset)))
+    .and(combine!(login_action, login_password_reset))
     .boxed()
 }

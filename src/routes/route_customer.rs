@@ -47,11 +47,6 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::customer::find);
 
   warp::path!("customer" / ..)
-    .and(balanced_or_tree!(get_all
-      .or(new)
-      .or(get_by_id)
-      .or(get_bulk)
-      .or(update)
-      .or(find)))
+    .and(combine!(get_all, new, get_by_id, get_bulk, update, find))
     .boxed()
 }

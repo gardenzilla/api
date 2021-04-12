@@ -6,7 +6,8 @@ use crate::{
 use warp::{Filter, Reply};
 
 pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
-  let add_new = warp::path::param()
+  let add_new = warp::path!("upload" / ..)
+    .and(warp::path::param())
     .and(warp::post())
     .and(auth())
     .and(add(services.clone()))
@@ -27,6 +28,6 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::sku_image::get_cover_bulk);
 
   warp::path!("sku_image" / ..)
-    .and(balanced_or_tree!(add_new.or(get_images).or(get_cover_bulk)))
+    .and(combine!(add_new, get_images, get_cover_bulk))
     .boxed()
 }

@@ -130,23 +130,25 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::procurement::set_status_closed);
 
   warp::path!("procurement" / ..)
-    .and(balanced_or_tree!(get_all
-      .or(create_new)
-      .or(get_by_id)
-      .or(get_bulk)
-      .or(remove)
-      .or(set_delivery_date)
-      .or(set_reference)
-      .or(add_sku)
-      .or(remove_sku)
-      .or(set_sku_piece)
-      .or(set_sku_price)
-      .or(add_upl)
-      .or(update_upl)
-      .or(remove_upl)
-      .or(set_status_ordered)
-      .or(set_status_arrived)
-      .or(set_status_processing)
-      .or(set_status_closed)))
+    .and(combine!(
+      get_all,
+      get_by_id,
+      create_new,
+      get_bulk,
+      remove,
+      set_delivery_date,
+      set_reference,
+      add_sku,
+      remove_sku,
+      set_sku_piece,
+      set_sku_price,
+      add_upl,
+      update_upl,
+      remove_upl,
+      set_status_ordered,
+      set_status_arrived,
+      set_status_processing,
+      set_status_closed
+    ))
     .boxed()
 }

@@ -33,9 +33,6 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::source::update);
 
   warp::path!("source" / ..)
-    .and(balanced_or_tree!(get_all
-      .or(create_new)
-      .or(get_by_id)
-      .or(update)))
+    .and(combine!(get_all, create_new, get_by_id, update))
     .boxed()
 }

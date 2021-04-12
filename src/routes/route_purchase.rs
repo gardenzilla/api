@@ -43,10 +43,12 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::purchase::get_bulk);
 
   warp::path!("purchase" / ..)
-    .and(balanced_or_tree!(get_info_by_id
-      .or(get_by_id)
-      .or(get_receipt_by_id)
-      .or(get_all)
-      .or(get_bulk)))
+    .and(combine!(
+      get_info_by_id,
+      get_by_id,
+      get_receipt_by_id,
+      get_all,
+      get_bulk
+    ))
     .boxed()
 }

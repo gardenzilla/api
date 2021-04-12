@@ -20,6 +20,6 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::invoice::download);
 
   warp::path!("invoice" / ..)
-    .and(balanced_or_tree!(get_by_id.or(download)))
+    .and(combine!(get_by_id, download))
     .boxed()
 }

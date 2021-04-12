@@ -26,8 +26,6 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::user::create_new);
 
   warp::path!("user" / ..)
-    .and(balanced_or_tree!(user_get_all
-      .or(user_get_by_id)
-      .or(user_new)))
+    .and(combine!(user_get_all, user_get_by_id, user_new))
     .boxed()
 }

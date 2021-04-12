@@ -131,23 +131,25 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::cart::cart_close);
 
   warp::path!("cart" / ..)
-    .and(balanced_or_tree!(get_all
-      .or(new)
-      .or(get_by_id)
-      .or(get_bulk)
-      .or(add_customer)
-      .or(remove_customer)
-      .or(add_sku)
-      .or(remove_sku)
-      .or(set_sku_piece)
-      .or(add_upl)
-      .or(remove_upl)
-      .or(set_payment)
-      .or(add_payment)
-      .or(set_document)
-      .or(add_loyalty_card)
-      .or(remove_loyalty_card)
-      .or(burn_points)
-      .or(close)))
+    .and(combine!(
+      get_all,
+      new,
+      get_by_id,
+      get_bulk,
+      add_customer,
+      remove_customer,
+      remove_sku,
+      add_sku,
+      set_sku_piece,
+      add_upl,
+      remove_upl,
+      set_payment,
+      add_payment,
+      set_document,
+      add_loyalty_card,
+      remove_loyalty_card,
+      burn_points,
+      close
+    ))
     .boxed()
 }

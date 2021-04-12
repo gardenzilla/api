@@ -63,13 +63,15 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::loyalty::set_birthdate);
 
   warp::path!("loyalty" / ..)
-    .and(balanced_or_tree!(new_account
-      .or(get_by_customer_id)
-      .or(get_by_card_id)
-      .or(get_by_query)
-      .or(get_transactions)
-      .or(set_card)
-      .or(set_loyalty_level)
-      .or(set_birthdate)))
+    .and(combine!(
+      new_account,
+      get_by_customer_id,
+      get_by_card_id,
+      get_by_query,
+      get_transactions,
+      set_card,
+      set_loyalty_level,
+      set_birthdate
+    ))
     .boxed()
 }

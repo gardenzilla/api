@@ -97,18 +97,20 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::upl::set_depreciation_price);
 
   warp::path!("upl" / ..)
-    .and(balanced_or_tree!(upl_get_by_id
-      .or(upl_get_by_id_archive)
-      .or(upl_get_bulk)
-      .or(get_by_sku_stock)
-      .or(split_upl)
-      .or(divide_upl)
-      .or(open)
-      .or(close)
-      .or(get_location_info)
-      .or(get_location_info_bulk)
-      .or(set_depreciation)
-      .or(set_depreciation_price)
-      .or(merge_back)))
+    .and(combine!(
+      upl_get_by_id,
+      upl_get_by_id_archive,
+      upl_get_bulk,
+      get_by_sku_stock,
+      split_upl,
+      divide_upl,
+      open,
+      close,
+      get_location_info,
+      get_location_info_bulk,
+      set_depreciation,
+      set_depreciation_price,
+      merge_back
+    ))
     .boxed()
 }

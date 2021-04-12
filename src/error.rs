@@ -24,7 +24,7 @@ impl ApiRejection {
   }
 }
 
-impl From<ApiError> for warp::reject::Rejection {
+impl From<crate::prelude::ApiError> for warp::reject::Rejection {
   fn from(error: ApiError) -> Self {
     match error {
       ApiError::NotFound => warp::reject::custom(ApiRejection::new(
@@ -61,7 +61,7 @@ impl From<tonic::Status> for ApiError {
   }
 }
 
-impl warp::reject::Reject for ApiError {}
+// impl warp::reject::Reject for ApiError {}
 
 pub async fn handle_rejection(err: warp::Rejection) -> Result<impl Reply, Infallible> {
   let code;

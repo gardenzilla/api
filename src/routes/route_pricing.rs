@@ -41,10 +41,12 @@ pub fn routes(services: Services) -> warp::filters::BoxedFilter<(impl Reply,)> {
     .and_then(handler::pricing::get_latest_price_changes);
 
   warp::path!("price" / ..)
-    .and(balanced_or_tree!(set_price
-      .or(get_by_id)
-      .or(get_bulk)
-      .or(get_price_history)
-      .or(get_price_changes)))
+    .and(combine!(
+      set_price,
+      get_by_id,
+      get_bulk,
+      get_price_history,
+      get_price_changes
+    ))
     .boxed()
 }

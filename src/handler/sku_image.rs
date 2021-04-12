@@ -1,13 +1,16 @@
 use crate::{prelude::*, services::Services};
+use bytes::{Buf, BufMut};
 use futures_util::TryStreamExt;
 use gzlib::proto::{
   sku_image::{CoverBulkRequest, CoverObj, NewRequest, SkuObj, SkuRequest},
   sku_image_processer::AddRequest,
 };
 use serde::{Deserialize, Serialize};
+use warp::{multipart, Filter};
+
 use warp::{
   multipart::{FormData, Part},
-  reply, Buf,
+  reply,
 };
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -54,7 +57,7 @@ pub async fn add_new(sku: u32, _uid: u32, mut services: Services, f: FormData) -
       let file_extension;
       match content_type {
         Some(file_type) => match file_type {
-          "application/jpg" => {
+          "application/jpg" | "application/jpeg" | "image/jpg" | "image/jpeg" => {
             file_extension = "jpg";
           }
           v => {
