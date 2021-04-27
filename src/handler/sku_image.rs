@@ -78,8 +78,8 @@ pub async fn add_new(sku: u32, _uid: u32, mut services: Services, f: FormData) -
 
       let image_bytes = p
         .stream()
-        .try_fold(Vec::new(), |mut vec, mut data| {
-          data.copy_to_slice(&mut vec);
+        .try_fold(Vec::new(), |mut vec, data| {
+          vec.put(data);
           async move { Ok(vec) }
         })
         .await
@@ -89,30 +89,16 @@ pub async fn add_new(sku: u32, _uid: u32, mut services: Services, f: FormData) -
         })?;
 
       // Try to create SKU image meta
-      let image_id = services
+      let _ = services
         .sku_image
         .add_new(NewRequest {
           sku,
           file_name,
           file_extension: file_extension.to_string(),
-          image_bytes: image_bytes.clone(),
+          image_bytes: image_bytes,
         })
         .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner()
-        .new_image_id;
-
-      // Try to send image to SKU IMAGE processer
-      let _ = services
-        .sku_img_processer
-        .add_image(AddRequest {
-          sku,
-          image_id,
-          image_bytes,
-        })
-        .await
-        .map_err(|e| ApiError::from(e))?
-        .into_inner();
+        .map_err(|e| ApiError::from(e))?;
     }
   }
 

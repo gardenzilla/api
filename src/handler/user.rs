@@ -60,25 +60,6 @@ pub async fn new_password(
     .await
     .map_err(|e| ApiError::from(e))?;
 
-  // Get userobject
-  let user = services
-    .user
-    .get_by_id(GetByIdRequest { userid: userid })
-    .await
-    .map_err(|e| ApiError::from(e))?
-    .into_inner();
-
-  // Send email
-  services
-    .email
-    .send_email(EmailRequest {
-      to: user.email,
-      subject: "Új jelszó beállítva".into(),
-      body: "Új jelszó lett beállítva a Gardenzilla fiókodban.".into(),
-    })
-    .await
-    .map_err(|_| ApiError::internal_error("Hiba az email elküldésekor"))?;
-
   Ok(reply::json(&()))
 }
 

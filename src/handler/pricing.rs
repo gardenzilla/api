@@ -69,7 +69,6 @@ impl From<PriceObject> for PriceForm {
 }
 
 pub async fn create_new(uid: u32, mut services: Services, pf: PriceForm) -> ApiResult {
-  // Store price to prices DB
   let price_form: PriceForm = services
     .pricing
     .set_price(SetPriceRequest {
@@ -83,18 +82,6 @@ pub async fn create_new(uid: u32, mut services: Services, pf: PriceForm) -> ApiR
     .map_err(|e| ApiError::from(e))?
     .into_inner()
     .into();
-
-  // Store prices to related UPLs
-  services
-    .upl
-    .set_sku_price(SetSkuPriceRequest {
-      sku: pf.sku,
-      net_price: pf.price_net_retail,
-      vat: pf.vat,
-      gross_price: pf.price_gross_retail,
-    })
-    .await
-    .map_err(|e| ApiError::from(e))?;
 
   // Return price_form as JSON
   Ok(reply::json(&price_form))

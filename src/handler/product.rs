@@ -188,48 +188,6 @@ pub async fn update_product(
   mut services: Services,
   p: ProductForm,
 ) -> ApiResult {
-  // Get current product version
-  let current_product: ProductForm = services
-    .product
-    .get_product(GetProductRequest { product_id: pid })
-    .await
-    .map_err(|e| ApiError::from(e))?
-    .into_inner()
-    .into();
-
-  // Check if we update unit
-  if current_product.unit != p.unit {
-    // Check if we have managed UPLs
-    // If we have any, dont update it!
-    if services
-      .upl
-      .get_by_product(ByProductRequest { product_id: pid })
-      .await
-      .map_err(|e| ApiError::from(e))?
-      .into_inner()
-      .upl_ids
-      .len()
-      > 0
-    {
-      return Err(
-        ApiError::bad_request(
-          "A termék mértékegysége nem változtatható! Már van raktáron hozzá UPL!",
-        )
-        .into(),
-      );
-    }
-
-    // Update UPLs product unit
-    services
-      .upl
-      .set_product_unit(SetProductUnitRequest {
-        product_id: pid,
-        unit: p.unit.clone(),
-      })
-      .await
-      .map_err(|e| ApiError::from(e))?;
-  }
-
   // Update product
   let product: ProductForm = services
     .product

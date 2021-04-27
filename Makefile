@@ -14,6 +14,7 @@ build:
 	cargo test
 
 run:
+	cargo update
 	cargo run
 
 run_release:

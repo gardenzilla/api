@@ -52,16 +52,5 @@ pub async fn reset_password(mut services: Services, form: FormResetPassword) -> 
     .map_err(|e| ApiError::from(e))?
     .into_inner();
 
-  // Send email
-  services
-    .email
-    .send_email(EmailRequest {
-      to: res.email,
-      subject: "Elfelejtett jelszó".into(),
-      body: format!("A Gardenzilla fiókodban töröltük a régi jelszavadat,\n és új jelszót állítottunk be.\n\n Az új jelszavad: {}", res.new_password),
-    })
-    .await
-    .map_err(|_| ApiError::internal_error("Hiba az email elküldésekor"))?;
-
   Ok(reply::json(&()))
 }
