@@ -1116,6 +1116,26 @@ pub async fn cart_remove_loyalty_card(
   Ok(reply::json(&res))
 }
 
+pub async fn cart_remove_commitment(
+  uid: u32,
+  mut services: Services,
+  f: CartRemoveLoyaltyCard,
+) -> ApiResult {
+  // Remove loyalty card to cart
+  let res: CartForm = services
+    .purchase
+    .cart_commitment_remove(RemoveCommitmentRequest {
+      cart_id: f.cart_id,
+      commitment_id: String::new(), // TODO! FIX THIS; we dont need commitment_id
+    })
+    .await
+    .map_err(|e| ApiError::from(e))?
+    .into_inner()
+    .try_into()?;
+
+  Ok(reply::json(&res))
+}
+
 pub async fn cart_burn_loyalty_points(
   uid: u32,
   mut services: Services,
